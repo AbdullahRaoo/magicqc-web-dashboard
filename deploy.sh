@@ -60,7 +60,7 @@ echo ""
 echo "=========================================="
 echo " Health Check"
 echo "=========================================="
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081)
+HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" https://127.0.0.1 -H "Host: magicqc.online")
 if [ "$HTTP_CODE" = "200" ]; then
     echo "✓ HTTP 200 — Site is UP"
 else
@@ -70,6 +70,26 @@ else
     echo "  docker-compose logs --tail=30 app"
     echo "  docker-compose logs --tail=30 worker"
     echo "  docker-compose logs --tail=30 nginx"
+    exit 1
+fi
+
+echo ""
+echo "=========================================="
+echo " Database Check"
+echo "=========================================="
+if docker-compose exec -T db sh -lc 'mysqladmin ping -h localhost -p"$MYSQL_ROOT_PASSWORD" >/dev/null'; then
+    echo "✓ MySQL is reachable"
+else
+    echo "✗ MySQL ping failed"
+    docker-compose logs --tail=30 db
+    exit 1
+fi
+
+if docker-compose exec -T app php artisan migrate:status --no-interaction >/dev/null; then
+    echo "✓ Laravel can access DB (migrations readable)"
+else
+    echo "✗ Laravel DB check failed"
+    docker-compose logs --tail=30 app
     exit 1
 fi
 
