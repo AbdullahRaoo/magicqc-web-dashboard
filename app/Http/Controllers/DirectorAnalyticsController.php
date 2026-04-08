@@ -6,9 +6,12 @@ use App\Models\Article;
 use App\Models\Brand;
 use App\Models\Operator;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class DirectorAnalyticsController extends Controller
 {
@@ -256,11 +259,53 @@ class DirectorAnalyticsController extends Controller
      */
     private function getPieceAnalytics(array $filters): array
     {
+        if (!Schema::hasTable('measurement_sessions')) {
+            return [
+                'overview' => [
+                    'total_pieces' => 0,
+                    'completed_pieces' => 0,
+                    'in_progress_pieces' => 0,
+                    'front_complete_pieces' => 0,
+                    'back_complete_pieces' => 0,
+                    'pass_pieces' => 0,
+                    'fail_pieces' => 0,
+                    'pending_pieces' => 0,
+                    'completion_rate' => 0,
+                    'pass_rate' => 0,
+                    'front_completion_rate' => 0,
+                    'back_completion_rate' => 0,
+                ],
+                'byArticle' => [],
+            ];
+        }
+
         $base = $this->buildPieceQuery($filters);
 
-        $summary = (clone $base)
-            ->selectRaw("\n                COUNT(*) as total_pieces,\n                SUM(CASE WHEN ms.status = 'completed' THEN 1 ELSE 0 END) as completed_pieces,\n                SUM(CASE WHEN ms.status = 'in_progress' THEN 1 ELSE 0 END) as in_progress_pieces,\n                SUM(CASE WHEN ms.front_side_complete = 1 THEN 1 ELSE 0 END) as front_complete_pieces,\n                SUM(CASE WHEN ms.back_side_complete = 1 THEN 1 ELSE 0 END) as back_complete_pieces,\n                SUM(CASE WHEN ms.front_qc_result = 'PASS' AND ms.back_qc_result = 'PASS' THEN 1 ELSE 0 END) as pass_pieces,\n                SUM(CASE WHEN ms.front_qc_result = 'FAIL' OR ms.back_qc_result = 'FAIL' THEN 1 ELSE 0 END) as fail_pieces\n            ")
-            ->first();
+        try {
+            $summary = (clone $base)
+                ->selectRaw("\n                COUNT(*) as total_pieces,\n                SUM(CASE WHEN ms.status = 'completed' THEN 1 ELSE 0 END) as completed_pieces,\n                SUM(CASE WHEN ms.status = 'in_progress' THEN 1 ELSE 0 END) as in_progress_pieces,\n                SUM(CASE WHEN ms.front_side_complete = 1 THEN 1 ELSE 0 END) as front_complete_pieces,\n                SUM(CASE WHEN ms.back_side_complete = 1 THEN 1 ELSE 0 END) as back_complete_pieces,\n                SUM(CASE WHEN ms.front_qc_result = 'PASS' AND ms.back_qc_result = 'PASS' THEN 1 ELSE 0 END) as pass_pieces,\n                SUM(CASE WHEN ms.front_qc_result = 'FAIL' OR ms.back_qc_result = 'FAIL' THEN 1 ELSE 0 END) as fail_pieces\n            ")
+                ->first();
+        } catch (Throwable $e) {
+            Log::warning('Piece analytics query failed', ['error' => $e->getMessage()]);
+
+            return [
+                'overview' => [
+                    'total_pieces' => 0,
+                    'completed_pieces' => 0,
+                    'in_progress_pieces' => 0,
+                    'front_complete_pieces' => 0,
+                    'back_complete_pieces' => 0,
+                    'pass_pieces' => 0,
+                    'fail_pieces' => 0,
+                    'pending_pieces' => 0,
+                    'completion_rate' => 0,
+                    'pass_rate' => 0,
+                    'front_completion_rate' => 0,
+                    'back_completion_rate' => 0,
+                ],
+                'byArticle' => [],
+            ];
+        }
 
         $totalPieces = (int) ($summary->total_pieces ?? 0);
         $completedPieces = (int) ($summary->completed_pieces ?? 0);
@@ -497,6 +542,15 @@ class DirectorAnalyticsController extends Controller
 
     private function getMeasurementFailureAnalysis(array $filters): array
     {
+        if (!Schema::hasTable('measurement_results_detailed')) {
+            return [
+                'parameterFailures' => [],
+                'articleFailures' => [],
+                'toleranceConcentration' => [],
+                'totalViolations' => 0,
+            ];
+        }
+
         $paramStats = [];
         $articleMeasurementFailures = [];
         $toleranceViolations = [];
@@ -625,23 +679,28 @@ class DirectorAnalyticsController extends Controller
 
         $whereClause = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
-        $rows = DB::select("
-            SELECT
-                m.measurement as param_name,
-                m.code as param_code,
-                mrd.article_style,
-                mrd.measured_value,
-                mrd.expected_value,
-                mrd.tol_plus,
-                mrd.tol_minus,
-                mrd.status,
-                mrd.side
-            FROM measurement_results_detailed mrd
-            JOIN measurements m ON mrd.measurement_id = m.id
-            JOIN purchase_order_articles poa ON mrd.purchase_order_article_id = poa.id
-            JOIN purchase_orders po ON poa.purchase_order_id = po.id
-            {$whereClause}
-        ", $bindings);
+        try {
+            $rows = DB::select("
+                SELECT
+                    m.measurement as param_name,
+                    m.code as param_code,
+                    mrd.article_style,
+                    mrd.measured_value,
+                    mrd.expected_value,
+                    mrd.tol_plus,
+                    mrd.tol_minus,
+                    mrd.status,
+                    mrd.side
+                FROM measurement_results_detailed mrd
+                JOIN measurements m ON mrd.measurement_id = m.id
+                JOIN purchase_order_articles poa ON mrd.purchase_order_article_id = poa.id
+                JOIN purchase_orders po ON poa.purchase_order_id = po.id
+                {$whereClause}
+            ", $bindings);
+        } catch (Throwable $e) {
+            Log::warning('Measurement failure analysis query failed', ['error' => $e->getMessage()]);
+            return;
+        }
 
         foreach ($rows as $row) {
             $paramKey = strtolower(str_replace(' ', '_', $row->param_name));
