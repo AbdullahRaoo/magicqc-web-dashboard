@@ -163,14 +163,19 @@ Route::middleware([\App\Http\Middleware\EnsureDeveloper::class])->group(function
         ->name('developer.settings.password');
 });
 
-// Director Analytics Dashboard (MEB only)
+// Analytics Dashboard (MEB only)
 Route::middleware([\App\Http\Middleware\EnsureMEB::class])->group(function () {
-    Route::get('director-analytics-dashboard', [\App\Http\Controllers\DirectorAnalyticsController::class, 'index'])
+    Route::get('analytics-dashboard', [\App\Http\Controllers\DirectorAnalyticsController::class, 'index'])
         ->name('director.analytics.dashboard');
-    Route::get('director-analytics-dashboard/export/excel', [\App\Http\Controllers\DirectorAnalyticsController::class, 'exportExcel'])
+    Route::get('analytics-dashboard/export/excel', [\App\Http\Controllers\DirectorAnalyticsController::class, 'exportExcel'])
         ->name('director.analytics.export.excel');
-    Route::get('director-analytics-dashboard/export/pdf', [\App\Http\Controllers\DirectorAnalyticsController::class, 'exportPdf'])
+    Route::get('analytics-dashboard/export/pdf', [\App\Http\Controllers\DirectorAnalyticsController::class, 'exportPdf'])
         ->name('director.analytics.export.pdf');
+
+    // Backward-compatible redirects
+    Route::redirect('director-analytics-dashboard', '/analytics-dashboard');
+    Route::redirect('director-analytics-dashboard/export/excel', '/analytics-dashboard/export/excel');
+    Route::redirect('director-analytics-dashboard/export/pdf', '/analytics-dashboard/export/pdf');
 });
 
 // System Settings (available to both ManagerQC and MEB roles)

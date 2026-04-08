@@ -46,6 +46,41 @@ interface SummaryStats {
     failRate: number;
 }
 
+interface PieceArticleSummaryItem {
+    article_style: string;
+    brand_name: string;
+    total_pieces: number;
+    completed_pieces: number;
+    in_progress_pieces: number;
+    pass_pieces: number;
+    fail_pieces: number;
+    pending_pieces: number;
+    front_complete_pieces: number;
+    back_complete_pieces: number;
+    completion_rate: number;
+    pass_rate: number;
+}
+
+interface PieceAnalyticsOverview {
+    total_pieces: number;
+    completed_pieces: number;
+    in_progress_pieces: number;
+    front_complete_pieces: number;
+    back_complete_pieces: number;
+    pass_pieces: number;
+    fail_pieces: number;
+    pending_pieces: number;
+    completion_rate: number;
+    pass_rate: number;
+    front_completion_rate: number;
+    back_completion_rate: number;
+}
+
+interface PieceAnalytics {
+    overview: PieceAnalyticsOverview;
+    byArticle: PieceArticleSummaryItem[];
+}
+
 interface ArticleSummaryItem {
     article_style: string;
     brand_name: string;
@@ -114,6 +149,7 @@ interface FailureAnalysis {
 
 interface Props {
     summary: SummaryStats;
+    pieceAnalytics: PieceAnalytics;
     articleSummary: ArticleSummaryItem[];
     operatorPerformance: OperatorPerformanceItem[];
     failureAnalysis: FailureAnalysis;
@@ -122,7 +158,7 @@ interface Props {
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Analytics Dashboard', href: '/director-analytics-dashboard' },
+    { title: 'Analytics Dashboard', href: '/analytics-dashboard' },
 ];
 
 // Reusable progress bar component
@@ -180,6 +216,7 @@ function RadialGauge({ value, size = 120, strokeWidth = 10 }: { value: number; s
 
 export default function DirectorAnalyticsDashboard({
     summary,
+    pieceAnalytics,
     articleSummary,
     operatorPerformance,
     failureAnalysis,
@@ -201,6 +238,7 @@ export default function DirectorAnalyticsDashboard({
 
     const [showFilters, setShowFilters] = useState(false);
     const [articleSearch, setArticleSearch] = useState('');
+    const [pieceSearch, setPieceSearch] = useState('');
     const [operatorSearch, setOperatorSearch] = useState('');
     const [reportType, setReportType] = useState<'all' | 'measurement' | 'article' | 'operator'>('all');
 
@@ -216,7 +254,7 @@ export default function DirectorAnalyticsDashboard({
             if (value !== '') cleanFilters[key] = value;
         });
 
-        router.get('/director-analytics-dashboard', cleanFilters, {
+        router.get('/analytics-dashboard', cleanFilters, {
             preserveState: true,
             preserveScroll: true,
         });
@@ -233,7 +271,7 @@ export default function DirectorAnalyticsDashboard({
             result: '',
             side: '',
         });
-        router.get('/director-analytics-dashboard', {}, {
+        router.get('/analytics-dashboard', {}, {
             preserveState: true,
             preserveScroll: true,
         });
@@ -246,7 +284,7 @@ export default function DirectorAnalyticsDashboard({
             if (value) params.append(key, value);
         });
         params.append('report_type', reportType);
-        window.location.href = `/director-analytics-dashboard/export/excel?${params.toString()}`;
+        window.location.href = `/analytics-dashboard/export/excel?${params.toString()}`;
     };
 
     const exportPdf = () => {
@@ -255,7 +293,7 @@ export default function DirectorAnalyticsDashboard({
             if (value) params.append(key, value);
         });
         params.append('report_type', reportType);
-        window.location.href = `/director-analytics-dashboard/export/pdf?${params.toString()}`;
+        window.location.href = `/analytics-dashboard/export/pdf?${params.toString()}`;
     };
 
     // Filter article summary by search
@@ -266,6 +304,14 @@ export default function DirectorAnalyticsDashboard({
             a => a.article_style.toLowerCase().includes(q) || a.brand_name.toLowerCase().includes(q)
         );
     }, [articleSummary, articleSearch]);
+
+    const filteredPieceArticles = useMemo(() => {
+        if (!pieceSearch) return pieceAnalytics.byArticle;
+        const q = pieceSearch.toLowerCase();
+        return pieceAnalytics.byArticle.filter(
+            p => p.article_style.toLowerCase().includes(q) || p.brand_name.toLowerCase().includes(q)
+        );
+    }, [pieceAnalytics.byArticle, pieceSearch]);
 
     // Filter operator performance by search
     const filteredOperators = useMemo(() => {
@@ -279,10 +325,12 @@ export default function DirectorAnalyticsDashboard({
     // Max values for progress bar scaling
     const maxArticleTotal = useMemo(() => Math.max(...articleSummary.map(a => a.total), 1), [articleSummary]);
     const maxOperatorTotal = useMemo(() => Math.max(...operatorPerformance.map(o => o.total), 1), [operatorPerformance]);
+    const maxPieceTotal = useMemo(() => Math.max(...pieceAnalytics.byArticle.map(p => p.total_pieces), 1), [pieceAnalytics.byArticle]);
+    const pieceOverview = pieceAnalytics.overview;
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Director Analytics Dashboard" />
+            <Head title="Analytics Dashboard" />
 
             <div className="flex h-full flex-1 flex-col gap-6 p-6">
                 {/* Header Section */}
@@ -294,10 +342,10 @@ export default function DirectorAnalyticsDashboard({
                     <div className="relative z-10 flex items-center justify-between">
                         <div className="flex-1">
                             <h1 className="text-4xl font-bold tracking-tight text-white">
-                                Measurement Analytics
+                                Analytics Dashboard
                             </h1>
                             <p className="mt-2 text-lg text-white/70">
-                                Performance Metrics and Insights
+                                Piece-level QC performance and compliance insights
                             </p>
                         </div>
                         <div className="hidden md:flex items-center gap-3">
@@ -530,6 +578,185 @@ export default function DirectorAnalyticsDashboard({
                         </CardContent>
                     </Card>
                 </div>
+
+                {/* Piece QC Overview */}
+                <Card className="border-border/50 shadow-sm">
+                    <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-100 dark:bg-sky-900/30">
+                                    <Activity className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-lg">Piece QC Overview</CardTitle>
+                                    <CardDescription className="text-sm">Per-piece progress, pass/fail, and side completeness</CardDescription>
+                                </div>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                            <Card className="border-slate-200 dark:border-slate-700 shadow-sm">
+                                <CardContent className="p-4">
+                                    <div className="text-sm text-slate-500">Total Pieces</div>
+                                    <div className="mt-1 text-3xl font-bold text-slate-800 dark:text-white">{pieceOverview.total_pieces.toLocaleString()}</div>
+                                    <div className="text-xs text-slate-500 mt-1">Session rows across all article pieces</div>
+                                </CardContent>
+                            </Card>
+                            <Card className="border-emerald-200 dark:border-emerald-900 shadow-sm">
+                                <CardContent className="p-4">
+                                    <div className="text-sm text-emerald-700 dark:text-emerald-400">Completed Pieces</div>
+                                    <div className="mt-1 text-3xl font-bold text-emerald-700 dark:text-emerald-300">{pieceOverview.completed_pieces.toLocaleString()}</div>
+                                    <div className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">{pieceOverview.completion_rate}% completed</div>
+                                </CardContent>
+                            </Card>
+                            <Card className="border-sky-200 dark:border-sky-900 shadow-sm">
+                                <CardContent className="p-4">
+                                    <div className="text-sm text-sky-700 dark:text-sky-400">Passing Pieces</div>
+                                    <div className="mt-1 text-3xl font-bold text-sky-700 dark:text-sky-300">{pieceOverview.pass_pieces.toLocaleString()}</div>
+                                    <div className="text-xs text-sky-600 dark:text-sky-400 mt-1">{pieceOverview.pass_rate}% pass rate</div>
+                                </CardContent>
+                            </Card>
+                            <Card className="border-rose-200 dark:border-rose-900 shadow-sm">
+                                <CardContent className="p-4">
+                                    <div className="text-sm text-rose-700 dark:text-rose-400">Pending Pieces</div>
+                                    <div className="mt-1 text-3xl font-bold text-rose-700 dark:text-rose-300">{pieceOverview.pending_pieces.toLocaleString()}</div>
+                                    <div className="text-xs text-rose-600 dark:text-rose-400 mt-1">Requires final QC decision</div>
+                                </CardContent>
+                            </Card>
+                        </div>
+
+                        <div className="grid gap-6 lg:grid-cols-2">
+                            <Card className="border-border/50 shadow-sm">
+                                <CardHeader className="pb-3">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <div>
+                                            <CardTitle className="text-lg">Piece Completion by Article</CardTitle>
+                                            <CardDescription className="text-sm">Which styles have the most completed QC pieces</CardDescription>
+                                        </div>
+                                    </div>
+                                    <div className="relative mt-2">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                        <Input
+                                            type="text"
+                                            placeholder="Search piece stats..."
+                                            value={pieceSearch}
+                                            onChange={(e) => setPieceSearch(e.target.value)}
+                                            className="h-10 pl-9 text-sm"
+                                        />
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="pt-0">
+                                    <div className="max-h-[420px] overflow-y-auto pr-1 space-y-3">
+                                        {filteredPieceArticles.length === 0 ? (
+                                            <p className="text-center text-sm text-slate-400 py-8">No piece QC data available</p>
+                                        ) : (
+                                            filteredPieceArticles.map((piece, idx) => {
+                                                return (
+                                                    <div
+                                                        key={`${piece.article_style}-${piece.brand_name}-${idx}`}
+                                                        className="rounded-lg border border-slate-100 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-800/30 p-3"
+                                                    >
+                                                        <div className="flex items-center justify-between mb-2">
+                                                            <div className="min-w-0">
+                                                                <div className="font-semibold text-sm text-slate-800 dark:text-slate-200 truncate">{piece.article_style}</div>
+                                                                <div className="text-[11px] text-slate-500">{piece.brand_name}</div>
+                                                            </div>
+                                                            <div className="text-right text-xs text-slate-500">
+                                                                <div>{piece.total_pieces} pieces</div>
+                                                                <div>{piece.completed_pieces} completed</div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="grid grid-cols-4 gap-2 mb-2 text-center">
+                                                            <div className="rounded-md bg-white dark:bg-slate-800 p-1.5 border border-slate-100 dark:border-slate-700">
+                                                                <div className="text-xs font-bold text-slate-800 dark:text-slate-200">{piece.pass_pieces}</div>
+                                                                <div className="text-[9px] text-slate-500 uppercase tracking-wider">Pass</div>
+                                                            </div>
+                                                            <div className="rounded-md bg-white dark:bg-slate-800 p-1.5 border border-slate-100 dark:border-slate-700">
+                                                                <div className="text-xs font-bold text-slate-800 dark:text-slate-200">{piece.fail_pieces}</div>
+                                                                <div className="text-[9px] text-slate-500 uppercase tracking-wider">Fail</div>
+                                                            </div>
+                                                            <div className="rounded-md bg-white dark:bg-slate-800 p-1.5 border border-slate-100 dark:border-slate-700">
+                                                                <div className="text-xs font-bold text-slate-800 dark:text-slate-200">{piece.in_progress_pieces}</div>
+                                                                <div className="text-[9px] text-slate-500 uppercase tracking-wider">In Progress</div>
+                                                            </div>
+                                                            <div className="rounded-md bg-white dark:bg-slate-800 p-1.5 border border-slate-100 dark:border-slate-700">
+                                                                <div className="text-xs font-bold text-slate-800 dark:text-slate-200">{piece.pending_pieces}</div>
+                                                                <div className="text-[9px] text-slate-500 uppercase tracking-wider">Pending</div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="space-y-2">
+                                                            <div>
+                                                                <div className="mb-1 flex items-center justify-between text-[11px] text-slate-500">
+                                                                    <span>Completion</span>
+                                                                    <span>{piece.completion_rate}%</span>
+                                                                </div>
+                                                                <ProgressBar value={piece.completed_pieces} max={maxPieceTotal} colorClass="bg-emerald-500" />
+                                                            </div>
+                                                            <div>
+                                                                <div className="mb-1 flex items-center justify-between text-[11px] text-slate-500">
+                                                                    <span>Pass rate</span>
+                                                                    <span>{piece.pass_rate}%</span>
+                                                                </div>
+                                                                <ProgressBar value={piece.pass_pieces} max={maxPieceTotal} colorClass="bg-sky-500" />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            <Card className="border-border/50 shadow-sm">
+                                <CardHeader className="pb-3">
+                                    <CardTitle className="text-lg">QC Completion Health</CardTitle>
+                                    <CardDescription className="text-sm">How far the operator panel has advanced each piece</CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div>
+                                        <div className="mb-1 flex items-center justify-between text-sm">
+                                            <span className="text-slate-600 dark:text-slate-300">Overall completion</span>
+                                            <span className="font-medium">{pieceOverview.completion_rate}%</span>
+                                        </div>
+                                        <ProgressBar value={pieceOverview.completed_pieces} max={pieceOverview.total_pieces || 1} colorClass="bg-emerald-500" />
+                                    </div>
+                                    <div>
+                                        <div className="mb-1 flex items-center justify-between text-sm">
+                                            <span className="text-slate-600 dark:text-slate-300">Front side completed</span>
+                                            <span className="font-medium">{pieceOverview.front_completion_rate}%</span>
+                                        </div>
+                                        <ProgressBar value={pieceOverview.front_complete_pieces} max={pieceOverview.total_pieces || 1} colorClass="bg-sky-500" />
+                                    </div>
+                                    <div>
+                                        <div className="mb-1 flex items-center justify-between text-sm">
+                                            <span className="text-slate-600 dark:text-slate-300">Back side completed</span>
+                                            <span className="font-medium">{pieceOverview.back_completion_rate}%</span>
+                                        </div>
+                                        <ProgressBar value={pieceOverview.back_complete_pieces} max={pieceOverview.total_pieces || 1} colorClass="bg-indigo-500" />
+                                    </div>
+                                    <div>
+                                        <div className="mb-1 flex items-center justify-between text-sm">
+                                            <span className="text-slate-600 dark:text-slate-300">Passing pieces</span>
+                                            <span className="font-medium">{pieceOverview.pass_rate}%</span>
+                                        </div>
+                                        <ProgressBar value={pieceOverview.pass_pieces} max={pieceOverview.total_pieces || 1} colorClass="bg-emerald-500" />
+                                    </div>
+                                    <div>
+                                        <div className="mb-1 flex items-center justify-between text-sm">
+                                            <span className="text-slate-600 dark:text-slate-300">Pending pieces</span>
+                                            <span className="font-medium">{pieceOverview.pending_pieces}</span>
+                                        </div>
+                                        <ProgressBar value={pieceOverview.pending_pieces} max={pieceOverview.total_pieces || 1} colorClass="bg-amber-500" />
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </CardContent>
+                </Card>
 
                 {/* Export Buttons with Report Type Filter */}
                 <Card className="border-border/50 shadow-sm">

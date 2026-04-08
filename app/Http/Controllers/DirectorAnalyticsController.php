@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Article;
 use App\Models\Brand;
-use App\Models\InspectionRecord;
 use App\Models\Operator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,10 +15,11 @@ class DirectorAnalyticsController extends Controller
     /**
      * Display the director analytics dashboard.
      *
-     * Queries TWO authoritative data sources:
-     *   1. measurement_results / measurement_results_detailed — written by the Operator Panel (Electron)
-     *   2. inspection_records — legacy/seeded QC inspection data
-     *
+        * Queries authoritative Operator Panel QC sources:
+        *   - measurement_results
+        *   - measurement_results_detailed
+        *   - measurement_sessions
+        *
      * Both are aggregated fresh on every request (no caching) so the dashboard
      * always reflects the latest committed measurements.
      */
@@ -28,6 +28,7 @@ class DirectorAnalyticsController extends Controller
         $filters = $this->extractFilters($request);
 
         $summary = $this->getSummaryStats($filters);
+        $pieceAnalytics = $this->getPieceAnalytics($filters);
         $articleSummary = $this->getArticleSummary($filters);
         $operatorPerformance = $this->getOperatorPerformance($filters);
         $filterOptions = $this->getFilterOptions();
@@ -35,6 +36,7 @@ class DirectorAnalyticsController extends Controller
 
         return Inertia::render('director-analytics/index', [
             'summary' => $summary,
+            'pieceAnalytics' => $pieceAnalytics,
             'articleSummary' => $articleSummary,
             'operatorPerformance' => $operatorPerformance,
             'failureAnalysis' => $failureAnalysis,
@@ -208,10 +210,116 @@ class DirectorAnalyticsController extends Controller
         ];
     }
 
+    /**
+     * Build the base query for session-level piece analytics.
+     */
+    private function buildPieceQuery(array $filters)
+    {
+        $query = DB::table('measurement_sessions as ms')
+            ->join('purchase_order_articles as poa', 'ms.purchase_order_article_id', '=', 'poa.id')
+            ->join('purchase_orders as po', 'poa.purchase_order_id', '=', 'po.id')
+            ->leftJoin('brands as b', 'po.brand_id', '=', 'b.id')
+            ->leftJoin('operators as o', 'ms.operator_id', '=', 'o.id')
+            ->selectRaw("\n                ms.purchase_order_article_id,\n                ms.size,\n                poa.article_style,\n                COALESCE(b.name, 'Unknown') as brand_name,\n                o.full_name as operator_name,\n                ms.status,\n                ms.front_side_complete,\n                ms.back_side_complete,\n                ms.front_qc_result,\n                ms.back_qc_result,\n                ms.created_at,\n                ms.updated_at\n            ");
+
+        if (!empty($filters['brand_id'])) {
+            $query->where('po.brand_id', $filters['brand_id']);
+        }
+        if (!empty($filters['article_style'])) {
+            $query->where('poa.article_style', $filters['article_style']);
+        }
+        if (!empty($filters['operator_id'])) {
+            $query->where('ms.operator_id', $filters['operator_id']);
+        }
+        if (!empty($filters['date_from'])) {
+            $query->whereDate('ms.created_at', '>=', $filters['date_from']);
+        }
+        if (!empty($filters['date_to'])) {
+            $query->whereDate('ms.created_at', '<=', $filters['date_to']);
+        }
+        if (!empty($filters['result'])) {
+            $result = strtoupper($filters['result']);
+            if ($result === 'PASS') {
+                $query->whereRaw("ms.front_qc_result = 'PASS' AND ms.back_qc_result = 'PASS'");
+            } elseif ($result === 'FAIL') {
+                $query->whereRaw("ms.front_qc_result = 'FAIL' OR ms.back_qc_result = 'FAIL'");
+            } elseif ($result === 'PENDING') {
+                $query->whereRaw("(ms.front_qc_result IS NULL OR ms.back_qc_result IS NULL OR ms.front_qc_result = 'PENDING' OR ms.back_qc_result = 'PENDING') AND NOT (ms.front_qc_result = 'PASS' AND ms.back_qc_result = 'PASS') AND NOT (ms.front_qc_result = 'FAIL' OR ms.back_qc_result = 'FAIL')");
+            }
+        }
+
+        return $query;
+    }
+
+    /**
+     * Build piece-level QC analytics for article pieces.
+     */
+    private function getPieceAnalytics(array $filters): array
+    {
+        $base = $this->buildPieceQuery($filters);
+
+        $summary = (clone $base)
+            ->selectRaw("\n                COUNT(*) as total_pieces,\n                SUM(CASE WHEN ms.status = 'completed' THEN 1 ELSE 0 END) as completed_pieces,\n                SUM(CASE WHEN ms.status = 'in_progress' THEN 1 ELSE 0 END) as in_progress_pieces,\n                SUM(CASE WHEN ms.front_side_complete = 1 THEN 1 ELSE 0 END) as front_complete_pieces,\n                SUM(CASE WHEN ms.back_side_complete = 1 THEN 1 ELSE 0 END) as back_complete_pieces,\n                SUM(CASE WHEN ms.front_qc_result = 'PASS' AND ms.back_qc_result = 'PASS' THEN 1 ELSE 0 END) as pass_pieces,\n                SUM(CASE WHEN ms.front_qc_result = 'FAIL' OR ms.back_qc_result = 'FAIL' THEN 1 ELSE 0 END) as fail_pieces\n            ")
+            ->first();
+
+        $totalPieces = (int) ($summary->total_pieces ?? 0);
+        $completedPieces = (int) ($summary->completed_pieces ?? 0);
+        $inProgressPieces = (int) ($summary->in_progress_pieces ?? 0);
+        $frontCompletePieces = (int) ($summary->front_complete_pieces ?? 0);
+        $backCompletePieces = (int) ($summary->back_complete_pieces ?? 0);
+        $passPieces = (int) ($summary->pass_pieces ?? 0);
+        $failPieces = (int) ($summary->fail_pieces ?? 0);
+        $pendingPieces = max($totalPieces - $passPieces - $failPieces, 0);
+
+        $articleRows = (clone $base)
+            ->selectRaw("\n                poa.article_style,\n                COALESCE(b.name, 'Unknown') as brand_name,\n                COUNT(*) as total_pieces,\n                SUM(CASE WHEN ms.status = 'completed' THEN 1 ELSE 0 END) as completed_pieces,\n                SUM(CASE WHEN ms.status = 'in_progress' THEN 1 ELSE 0 END) as in_progress_pieces,\n                SUM(CASE WHEN ms.front_qc_result = 'PASS' AND ms.back_qc_result = 'PASS' THEN 1 ELSE 0 END) as pass_pieces,\n                SUM(CASE WHEN ms.front_qc_result = 'FAIL' OR ms.back_qc_result = 'FAIL' THEN 1 ELSE 0 END) as fail_pieces,\n                SUM(CASE WHEN ms.front_side_complete = 1 THEN 1 ELSE 0 END) as front_complete_pieces,\n                SUM(CASE WHEN ms.back_side_complete = 1 THEN 1 ELSE 0 END) as back_complete_pieces\n            ")
+            ->groupBy('poa.article_style', 'b.name')
+            ->orderByDesc('total_pieces')
+            ->get()
+            ->map(function ($row) {
+                $total = (int) $row->total_pieces;
+                $pass = (int) $row->pass_pieces;
+                $fail = (int) $row->fail_pieces;
+
+                return [
+                    'article_style' => $row->article_style,
+                    'brand_name' => $row->brand_name,
+                    'total_pieces' => $total,
+                    'completed_pieces' => (int) $row->completed_pieces,
+                    'in_progress_pieces' => (int) $row->in_progress_pieces,
+                    'pass_pieces' => $pass,
+                    'fail_pieces' => $fail,
+                    'pending_pieces' => max($total - $pass - $fail, 0),
+                    'front_complete_pieces' => (int) $row->front_complete_pieces,
+                    'back_complete_pieces' => (int) $row->back_complete_pieces,
+                    'completion_rate' => $total > 0 ? round(((int) $row->completed_pieces / $total) * 100, 1) : 0,
+                    'pass_rate' => $total > 0 ? round(($pass / $total) * 100, 1) : 0,
+                ];
+            })
+            ->toArray();
+
+        return [
+            'overview' => [
+                'total_pieces' => $totalPieces,
+                'completed_pieces' => $completedPieces,
+                'in_progress_pieces' => $inProgressPieces,
+                'front_complete_pieces' => $frontCompletePieces,
+                'back_complete_pieces' => $backCompletePieces,
+                'pass_pieces' => $passPieces,
+                'fail_pieces' => $failPieces,
+                'pending_pieces' => $pendingPieces,
+                'completion_rate' => $totalPieces > 0 ? round(($completedPieces / $totalPieces) * 100, 1) : 0,
+                'pass_rate' => $totalPieces > 0 ? round(($passPieces / $totalPieces) * 100, 1) : 0,
+                'front_completion_rate' => $totalPieces > 0 ? round(($frontCompletePieces / $totalPieces) * 100, 1) : 0,
+                'back_completion_rate' => $totalPieces > 0 ? round(($backCompletePieces / $totalPieces) * 100, 1) : 0,
+            ],
+            'byArticle' => $articleRows,
+        ];
+    }
+
     // ──────────────────────────────────────────────────────────────
     //  UNIFIED QUERY HELPERS
-    //  Combine Operator Panel data (measurement_results) with
-    //  legacy inspection_records into a single aggregation.
+    //  Operator Panel query helpers (measurement_results family).
     // ──────────────────────────────────────────────────────────────
 
     /**
@@ -252,35 +360,16 @@ class DirectorAnalyticsController extends Controller
         return [$sql, $bindings];
     }
 
-    /**
-     * Build a filtered Eloquent query builder for inspection_records.
-     */
-    private function buildIrQuery(array $filters)
-    {
-        $query = InspectionRecord::query();
-
-        if (!empty($filters['brand_id']))      $query->where('brand_id', $filters['brand_id']);
-        if (!empty($filters['article_style'])) $query->where('article_style', $filters['article_style']);
-        if (!empty($filters['operator_id']))   $query->where('operator_id', $filters['operator_id']);
-        if (!empty($filters['date_from']))     $query->whereDate('inspected_at', '>=', $filters['date_from']);
-        if (!empty($filters['date_to']))       $query->whereDate('inspected_at', '<=', $filters['date_to']);
-        if (!empty($filters['result']))        $query->where('result', $filters['result']);
-
-        return $query;
-    }
-
     // ──────────────────────────────────────────────────────────────
     //  SUMMARY STATS  (Total Measurements, Pass, Fail, Rates)
+    //  Source: measurement_results (Operator Panel)
     // ──────────────────────────────────────────────────────────────
 
     /**
-     * Get summary statistics by combining both data sources.
-     * measurement_results provides per-POM PASS/FAIL/PENDING from the Operator Panel.
-     * inspection_records provides legacy per-article pass/fail.
+     * Get summary statistics from measurement_results only.
      */
     private function getSummaryStats(array $filters): array
     {
-        // --- Source 1: measurement_results (Operator Panel) ---
         [$mrWhere, $mrBindings] = $this->buildMrWhere($filters);
 
         $mrStats = DB::selectOne("
@@ -294,20 +383,9 @@ class DirectorAnalyticsController extends Controller
             {$mrWhere}
         ", $mrBindings);
 
-        // --- Source 2: inspection_records (legacy) ---
-        $irQuery = $this->buildIrQuery($filters);
-        $irStats = (clone $irQuery)
-            ->selectRaw('
-                COUNT(*) as total,
-                SUM(CASE WHEN result = ? THEN 1 ELSE 0 END) as pass,
-                SUM(CASE WHEN result = ? THEN 1 ELSE 0 END) as fail
-            ', ['pass', 'fail'])
-            ->first();
-
-        // Combine both sources
-        $total = (int) ($mrStats->total ?? 0) + (int) ($irStats->total ?? 0);
-        $pass = (int) ($mrStats->pass ?? 0) + (int) ($irStats->pass ?? 0);
-        $fail = (int) ($mrStats->fail ?? 0) + (int) ($irStats->fail ?? 0);
+        $total = (int) ($mrStats->total ?? 0);
+        $pass = (int) ($mrStats->pass ?? 0);
+        $fail = (int) ($mrStats->fail ?? 0);
 
         return [
             'total' => $total,
@@ -324,7 +402,6 @@ class DirectorAnalyticsController extends Controller
 
     private function getArticleSummary(array $filters): array
     {
-        // --- Source 1: measurement_results ---
         [$mrWhere, $mrBindings] = $this->buildMrWhere($filters);
 
         $mrRows = DB::select("
@@ -343,24 +420,15 @@ class DirectorAnalyticsController extends Controller
             ORDER BY total DESC
         ", $mrBindings);
 
-        // --- Source 2: inspection_records ---
-        $irQuery = $this->buildIrQuery($filters);
-        $irRows = (clone $irQuery)
-            ->join('brands', 'inspection_records.brand_id', '=', 'brands.id')
-            ->select([
-                'inspection_records.article_style',
-                'brands.name as brand_name',
-                DB::raw('COUNT(*) as total'),
-                DB::raw("SUM(CASE WHEN inspection_records.result = 'pass' THEN 1 ELSE 0 END) as pass"),
-                DB::raw("SUM(CASE WHEN inspection_records.result = 'fail' THEN 1 ELSE 0 END) as fail"),
-            ])
-            ->groupBy('inspection_records.article_style', 'brands.name')
-            ->orderByDesc('total')
-            ->get()
-            ->toArray();
-
-        // Merge: combine by (article_style, brand_name)
-        return $this->mergeGroupedRows($mrRows, $irRows, ['article_style', 'brand_name']);
+        return array_map(function ($row) {
+            $row = (array) $row;
+            return [
+                ...$row,
+                'total' => (int) ($row['total'] ?? 0),
+                'pass' => (int) ($row['pass'] ?? 0),
+                'fail' => (int) ($row['fail'] ?? 0),
+            ];
+        }, $mrRows);
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -369,7 +437,6 @@ class DirectorAnalyticsController extends Controller
 
     private function getOperatorPerformance(array $filters): array
     {
-        // --- Source 1: measurement_results ---
         [$mrWhere, $mrBindings] = $this->buildMrWhere($filters);
 
         $mrRows = DB::select("
@@ -388,67 +455,15 @@ class DirectorAnalyticsController extends Controller
             ORDER BY total DESC
         ", $mrBindings);
 
-        // --- Source 2: inspection_records ---
-        $irQuery = $this->buildIrQuery($filters);
-        $irRows = (clone $irQuery)
-            ->join('operators', 'inspection_records.operator_id', '=', 'operators.id')
-            ->select([
-                'operators.full_name as operator_name',
-                'operators.employee_id',
-                DB::raw('COUNT(*) as total'),
-                DB::raw("SUM(CASE WHEN inspection_records.result = 'pass' THEN 1 ELSE 0 END) as pass"),
-                DB::raw("SUM(CASE WHEN inspection_records.result = 'fail' THEN 1 ELSE 0 END) as fail"),
-            ])
-            ->groupBy('operators.full_name', 'operators.employee_id')
-            ->orderByDesc('total')
-            ->get()
-            ->toArray();
-
-        return $this->mergeGroupedRows($mrRows, $irRows, ['operator_name', 'employee_id']);
-    }
-
-    /**
-     * Merge two sets of grouped rows (from measurement_results + inspection_records)
-     * by composite key, summing total/pass/fail.
-     */
-    private function mergeGroupedRows($mrRows, array $irRows, array $keyFields): array
-    {
-        $merged = [];
-
-        // Index measurement_results rows
-        foreach ($mrRows as $row) {
+        return array_map(function ($row) {
             $row = (array) $row;
-            $key = implode('|', array_map(fn($f) => $row[$f] ?? '', $keyFields));
-            $merged[$key] = [
+            return [
                 ...$row,
-                'total' => (int) $row['total'],
-                'pass' => (int) $row['pass'],
-                'fail' => (int) $row['fail'],
+                'total' => (int) ($row['total'] ?? 0),
+                'pass' => (int) ($row['pass'] ?? 0),
+                'fail' => (int) ($row['fail'] ?? 0),
             ];
-        }
-
-        // Add inspection_records rows
-        foreach ($irRows as $row) {
-            $row = (array) $row;
-            $key = implode('|', array_map(fn($f) => $row[$f] ?? '', $keyFields));
-            if (isset($merged[$key])) {
-                $merged[$key]['total'] += (int) $row['total'];
-                $merged[$key]['pass'] += (int) $row['pass'];
-                $merged[$key]['fail'] += (int) $row['fail'];
-            } else {
-                $merged[$key] = [
-                    ...$row,
-                    'total' => (int) $row['total'],
-                    'pass' => (int) $row['pass'],
-                    'fail' => (int) $row['fail'],
-                ];
-            }
-        }
-
-        // Sort by total desc and return values
-        $result = array_values($merged);
-        usort($result, fn($a, $b) => $b['total'] <=> $a['total']);
-        return $result;
+        }, $mrRows);
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -457,16 +472,12 @@ class DirectorAnalyticsController extends Controller
 
     private function getFilterOptions(): array
     {
-        // Merge article styles from both sources
-        $irStyles = InspectionRecord::select('article_style')
-            ->distinct()->pluck('article_style')->toArray();
-
         $mrStyles = DB::table('measurement_results')
             ->join('purchase_order_articles', 'measurement_results.purchase_order_article_id', '=', 'purchase_order_articles.id')
             ->select('purchase_order_articles.article_style')
             ->distinct()->pluck('article_style')->toArray();
 
-        $allStyles = collect(array_merge($irStyles, $mrStyles))
+        $allStyles = collect($mrStyles)
             ->unique()->sort()->values()->toArray();
 
         return [
@@ -481,8 +492,7 @@ class DirectorAnalyticsController extends Controller
 
     // ──────────────────────────────────────────────────────────────
     //  MEASUREMENT FAILURE ANALYSIS
-    //  Uses measurement_results_detailed (authoritative per-POM per-side)
-    //  as primary source, falling back to inspection_records JSON for legacy.
+    //  Uses measurement_results_detailed (authoritative per-POM per-side).
     // ──────────────────────────────────────────────────────────────
 
     private function getMeasurementFailureAnalysis(array $filters): array
@@ -493,9 +503,6 @@ class DirectorAnalyticsController extends Controller
 
         // --- Source 1: measurement_results_detailed (Operator Panel, per-POM per-side) ---
         $this->analyzeMrdRecords($filters, $paramStats, $articleMeasurementFailures, $toleranceViolations);
-
-        // --- Source 2: inspection_records JSON (legacy) ---
-        $this->analyzeIrRecords($filters, $paramStats, $articleMeasurementFailures, $toleranceViolations);
 
         // --- Build output arrays ---
 
@@ -669,54 +676,6 @@ class DirectorAnalyticsController extends Controller
                     'tolerance' => (float) ($row->tol_plus ?? 0),
                     'deviation' => $deviation,
                 ];
-            }
-        }
-    }
-
-    /**
-     * Analyze inspection_records JSON measurement_data for failure data (legacy source).
-     */
-    private function analyzeIrRecords(array $filters, array &$paramStats, array &$articleMeasurementFailures, array &$toleranceViolations): void
-    {
-        $records = $this->buildIrQuery($filters)
-            ->select(['measurement_data', 'article_style', 'result'])
-            ->get();
-
-        foreach ($records as $record) {
-            $data = $record->measurement_data;
-            if (!$data || !isset($data['parameters'])) continue;
-
-            foreach ($data['parameters'] as $param) {
-                $name = $param['parameter'] ?? null;
-                if (!$name) continue;
-
-                if (!isset($paramStats[$name])) {
-                    $paramStats[$name] = ['checked' => 0, 'failed' => 0, 'total_deviation' => 0];
-                }
-                $paramStats[$name]['checked']++;
-
-                if (($param['status'] ?? '') === 'fail') {
-                    $paramStats[$name]['failed']++;
-                    $paramStats[$name]['total_deviation'] += abs($param['deviation'] ?? 0);
-
-                    $articleStyle = $record->article_style;
-                    if (!isset($articleMeasurementFailures[$articleStyle])) {
-                        $articleMeasurementFailures[$articleStyle] = [];
-                    }
-                    if (!isset($articleMeasurementFailures[$articleStyle][$name])) {
-                        $articleMeasurementFailures[$articleStyle][$name] = 0;
-                    }
-                    $articleMeasurementFailures[$articleStyle][$name]++;
-
-                    $toleranceViolations[] = [
-                        'parameter' => $name,
-                        'article_style' => $articleStyle,
-                        'expected' => $param['expected'] ?? 0,
-                        'actual' => $param['actual'] ?? 0,
-                        'tolerance' => $param['tolerance'] ?? 0,
-                        'deviation' => $param['deviation'] ?? 0,
-                    ];
-                }
             }
         }
     }

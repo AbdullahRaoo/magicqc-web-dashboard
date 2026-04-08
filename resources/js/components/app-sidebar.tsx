@@ -47,7 +47,7 @@ const developerNavItem: NavItem = {
 const mebNavItems: NavItem[] = [
     {
         title: 'Analytics Dashboard',
-        href: '/director-analytics-dashboard',
+        href: '/analytics-dashboard',
         icon: BarChart3,
     },
 ];
@@ -72,7 +72,7 @@ export function AppSidebar() {
     }
 
     // Determine home link based on role
-    const homeLink = authRole === 'meb' ? '/director-analytics-dashboard' : dashboard();
+    const homeLink = authRole === 'meb' ? '/analytics-dashboard' : dashboard();
 
     return (
         <Sidebar collapsible="icon" variant="inset">
