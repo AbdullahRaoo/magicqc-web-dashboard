@@ -637,7 +637,7 @@ class DirectorAnalyticsController extends Controller
                 mrd.status,
                 mrd.side
             FROM measurement_results_detailed mrd
-            JOIN measurements m ON mrd.measurement_id = m.id AND m.deleted_at IS NULL
+            JOIN measurements m ON mrd.measurement_id = m.id
             JOIN purchase_order_articles poa ON mrd.purchase_order_article_id = poa.id
             JOIN purchase_orders po ON poa.purchase_order_id = po.id
             {$whereClause}
