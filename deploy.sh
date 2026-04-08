@@ -78,6 +78,32 @@ for i in $(seq 1 30); do
 done
 
 if [ "$APP_HTTP_CODE" != "200" ] || [ "$EDGE_HTTP_CODE" != "200" ]; then
+    if [ "$APP_HTTP_CODE" = "200" ] && [ "$EDGE_HTTP_CODE" != "200" ]; then
+        echo ""
+        echo "Docker nginx is healthy but host HTTPS edge is failing."
+        echo "Attempting host edge proxy reload/restart (robionix_nginx)..."
+
+        if docker ps --format '{{.Names}}' | grep -qx 'robionix_nginx'; then
+            docker exec robionix_nginx nginx -s reload >/dev/null 2>&1 || true
+            docker restart robionix_nginx >/dev/null 2>&1 || true
+
+            for i in $(seq 1 20); do
+                EDGE_HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" https://127.0.0.1 -H "Host: magicqc.online" || true)
+                if [ "$EDGE_HTTP_CODE" = "200" ]; then
+                    echo "✓ Host HTTPS edge recovered after robionix_nginx refresh"
+                    break
+                fi
+                echo "  edge retry $i/20 -> https:$EDGE_HTTP_CODE"
+                sleep 3
+            done
+        else
+            echo "robionix_nginx container not found; skipping auto-recovery."
+        fi
+    fi
+
+fi
+
+if [ "$APP_HTTP_CODE" != "200" ] || [ "$EDGE_HTTP_CODE" != "200" ]; then
     echo "✗ Health check failed after retries"
     echo ""
     if [ "$APP_HTTP_CODE" != "200" ]; then
