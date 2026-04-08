@@ -60,16 +60,38 @@ echo ""
 echo "=========================================="
 echo " Health Check"
 echo "=========================================="
-HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" https://127.0.0.1 -H "Host: magicqc.online")
-if [ "$HTTP_CODE" = "200" ]; then
-    echo "✓ HTTP 200 — Site is UP"
-else
-    echo "✗ HTTP $HTTP_CODE — Something is wrong!"
+echo "Running layered HTTP checks with retry (up to ~90s)..."
+
+APP_HTTP_CODE="000"
+EDGE_HTTP_CODE="000"
+for i in $(seq 1 30); do
+    APP_HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8081 -H "Host: magicqc.online" || true)
+    EDGE_HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" https://127.0.0.1 -H "Host: magicqc.online" || true)
+
+    if [ "$APP_HTTP_CODE" = "200" ] && [ "$EDGE_HTTP_CODE" = "200" ]; then
+        echo "✓ HTTP 200 — Site is UP (docker nginx + host edge)"
+        break
+    fi
+
+    echo "  attempt $i/30 -> docker-nginx:$APP_HTTP_CODE, edge-https:$EDGE_HTTP_CODE"
+    sleep 3
+done
+
+if [ "$APP_HTTP_CODE" != "200" ] || [ "$EDGE_HTTP_CODE" != "200" ]; then
+    echo "✗ Health check failed after retries"
+    echo ""
+    if [ "$APP_HTTP_CODE" != "200" ]; then
+        echo "- Docker nginx path failed (http://127.0.0.1:8081 Host:magicqc.online => $APP_HTTP_CODE)"
+    fi
+    if [ "$EDGE_HTTP_CODE" != "200" ]; then
+        echo "- Host HTTPS edge failed (https://127.0.0.1 Host:magicqc.online => $EDGE_HTTP_CODE)"
+    fi
     echo ""
     echo "Debug with:"
-    echo "  docker-compose logs --tail=30 app"
-    echo "  docker-compose logs --tail=30 worker"
-    echo "  docker-compose logs --tail=30 nginx"
+    echo "  docker-compose logs --tail=50 app"
+    echo "  docker-compose logs --tail=50 worker"
+    echo "  docker-compose logs --tail=50 nginx"
+    echo "  docker logs --tail=50 robionix_nginx"
     exit 1
 fi
 
