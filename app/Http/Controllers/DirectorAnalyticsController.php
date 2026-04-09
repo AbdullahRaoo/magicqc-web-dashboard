@@ -102,6 +102,7 @@ class DirectorAnalyticsController extends Controller
         $summary = $this->getSummaryStats($filters);
         $pieceAnalytics = $this->getPieceAnalytics($filters);
         $articleSummary = $this->getArticleSummary($filters);
+        $qcHistory = $this->getQcHistory($filters);
         $operatorPerformance = $this->getOperatorPerformance($filters);
         $filterOptions = $this->getFilterOptions();
         $failureAnalysis = $this->getMeasurementFailureAnalysis($filters);
@@ -110,6 +111,7 @@ class DirectorAnalyticsController extends Controller
             'summary' => $summary,
             'pieceAnalytics' => $pieceAnalytics,
             'articleSummary' => $articleSummary,
+            'qcHistory' => $qcHistory,
             'operatorPerformance' => $operatorPerformance,
             'failureAnalysis' => $failureAnalysis,
             'filterOptions' => $filterOptions,
@@ -297,7 +299,8 @@ class DirectorAnalyticsController extends Controller
             ->leftJoin('article_types as at', 'poa.article_type_id', '=', 'at.id')
             ->leftJoin('brands as b', 'po.brand_id', '=', 'b.id')
             ->leftJoin('operators as o', 'ms.operator_id', '=', 'o.id')
-            ->selectRaw("\n                ms.purchase_order_article_id,\n                ms.size,\n                poa.article_style,\n                poa.article_type_id,\n                COALESCE(at.name, 'Unknown') as article_type_name,\n                COALESCE(b.name, 'Unknown') as brand_name,\n                o.full_name as operator_name,\n                o.employee_id,\n                ms.status,\n                ms.front_side_complete,\n                ms.back_side_complete,\n                ms.front_qc_result,\n                ms.back_qc_result,\n                CASE\n                    WHEN ms.front_qc_result = 'PASS' AND ms.back_qc_result = 'PASS' THEN 'PASS'\n                    WHEN ms.front_qc_result = 'FAIL' OR ms.back_qc_result = 'FAIL' THEN 'FAIL'\n                    ELSE 'PENDING'\n                END as piece_result,\n                ms.created_at,\n                ms.updated_at\n            ");
+            ->selectRaw("\n                ms.purchase_order_article_id,\n                ms.piece_session_id,\n                ms.size,\n                poa.article_style,\n                poa.article_type_id,\n                COALESCE(at.name, 'Unknown') as article_type_name,\n                COALESCE(b.name, 'Unknown') as brand_name,\n                o.full_name as operator_name,\n                o.employee_id,\n                ms.status,\n                ms.front_side_complete,\n                ms.back_side_complete,\n                ms.front_qc_result,\n                ms.back_qc_result,\n                CASE\n                    WHEN ms.front_qc_result = 'PASS' AND ms.back_qc_result = 'PASS' THEN 'PASS'\n                    WHEN ms.front_qc_result = 'FAIL' OR ms.back_qc_result = 'FAIL' THEN 'FAIL'\n                    ELSE 'PENDING'\n                END as piece_result,\n                ms.created_at,\n                ms.updated_at\n            ");
+
 
         if (!empty($filters['brand_id'])) {
             $query->where('po.brand_id', $filters['brand_id']);
@@ -552,6 +555,55 @@ class DirectorAnalyticsController extends Controller
                     'total' => (int) ($row->total ?? 0),
                     'pass' => (int) ($row->pass ?? 0),
                     'fail' => (int) ($row->fail ?? 0),
+                ];
+            })
+            ->toArray();
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    //  QC HISTORY
+    // ──────────────────────────────────────────────────────────────
+
+    private function getQcHistory(array $filters): array
+    {
+        $basePieces = $this->buildPieceQuery($filters);
+        $latestDetailed = $this->latestMeasurementResultsDetailedSubquery();
+
+        $measurementCounts = DB::query()
+            ->from(DB::raw("({$latestDetailed}) as mrd"))
+            ->selectRaw("\n                mrd.piece_session_id,\n                COUNT(*) as total_measurements,\n                SUM(CASE WHEN mrd.status = 'PASS' THEN 1 ELSE 0 END) as measurements_passed,\n                SUM(CASE WHEN mrd.status = 'FAIL' THEN 1 ELSE 0 END) as measurements_failed\n            ")
+            ->groupBy('mrd.piece_session_id');
+
+        return DB::query()
+            ->fromSub($basePieces, 'pieces')
+            ->leftJoinSub($measurementCounts, 'mc', function ($join) {
+                $join->on('pieces.piece_session_id', '=', 'mc.piece_session_id');
+            })
+            ->orderByDesc('pieces.updated_at')
+            ->orderByDesc('pieces.created_at')
+            ->limit(50)
+            ->get()
+            ->map(function ($row) {
+                $passed = (int) ($row->measurements_passed ?? 0);
+                $failed = (int) ($row->measurements_failed ?? 0);
+                $totalMeasurements = (int) ($row->total_measurements ?? ($passed + $failed));
+
+                return [
+                    'piece_session_id' => $row->piece_session_id,
+                    'piece_result' => $row->piece_result,
+                    'measurements_passed' => $passed,
+                    'measurements_failed' => $failed,
+                    'total_measurements' => $totalMeasurements,
+                    'article_style' => $row->article_style,
+                    'brand_name' => $row->brand_name,
+                    'article_type_id' => (int) ($row->article_type_id ?? 0),
+                    'article_type_name' => $row->article_type_name,
+                    'size' => $row->size,
+                    'operator_name' => $row->operator_name,
+                    'employee_id' => $row->employee_id,
+                    'status' => $row->status,
+                    'created_at' => $row->created_at,
+                    'updated_at' => $row->updated_at,
                 ];
             })
             ->toArray();

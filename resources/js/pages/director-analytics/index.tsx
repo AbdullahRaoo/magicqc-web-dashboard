@@ -17,6 +17,7 @@ import {
     BarChart3,
     Users,
     Package,
+    ClipboardList,
     Filter,
     RefreshCw,
     Activity,
@@ -73,15 +74,22 @@ interface PieceAnalytics {
     byArticle: PieceArticleSummaryItem[];
 }
 
-interface ArticleSummaryItem {
+interface QcHistoryItem {
+    piece_session_id: string;
+    piece_result: string;
+    measurements_passed: number;
+    measurements_failed: number;
+    total_measurements: number;
     article_style: string;
     brand_name: string;
     article_type_id?: number;
     article_type_name?: string;
     size?: string;
-    total: number;
-    pass: number;
-    fail: number;
+    operator_name?: string;
+    employee_id?: string;
+    status?: string;
+    created_at?: string;
+    updated_at?: string;
 }
 
 interface OperatorPerformanceItem {
@@ -149,7 +157,7 @@ interface FailureAnalysis {
 interface Props {
     summary: SummaryStats;
     pieceAnalytics: PieceAnalytics;
-    articleSummary: ArticleSummaryItem[];
+    qcHistory: QcHistoryItem[];
     operatorPerformance: OperatorPerformanceItem[];
     failureAnalysis: FailureAnalysis;
     filterOptions: FilterOptions;
@@ -216,7 +224,7 @@ function RadialGauge({ value, size = 120, strokeWidth = 10 }: { value: number; s
 export default function DirectorAnalyticsDashboard({
     summary,
     pieceAnalytics,
-    articleSummary,
+    qcHistory,
     operatorPerformance,
     failureAnalysis,
     filterOptions,
@@ -238,7 +246,6 @@ export default function DirectorAnalyticsDashboard({
     });
 
     const [showFilters, setShowFilters] = useState(false);
-    const [articleSearch, setArticleSearch] = useState('');
     const [operatorSearch, setOperatorSearch] = useState('');
 
     // Check if any filters are applied
@@ -278,38 +285,6 @@ export default function DirectorAnalyticsDashboard({
         });
     }, []);
 
-    // Export handlers
-    const exportExcel = () => {
-        const params = new URLSearchParams();
-        Object.entries(filters).forEach(([key, value]) => {
-            if (value) params.append(key, value);
-        });
-        params.append('report_type', reportType);
-        window.location.href = `/analytics-dashboard/export/excel?${params.toString()}`;
-    };
-
-    const exportPdf = () => {
-        const params = new URLSearchParams();
-        Object.entries(filters).forEach(([key, value]) => {
-            if (value) params.append(key, value);
-        });
-        params.append('report_type', reportType);
-        window.location.href = `/analytics-dashboard/export/pdf?${params.toString()}`;
-    };
-
-    // Filter article summary by search
-    const filteredArticles = useMemo(() => {
-        if (!articleSearch) return articleSummary;
-        const q = articleSearch.toLowerCase();
-        return articleSummary.filter(
-            a =>
-                a.article_style.toLowerCase().includes(q) ||
-                a.brand_name.toLowerCase().includes(q) ||
-                (a.article_type_name || '').toLowerCase().includes(q) ||
-                (a.size || '').toLowerCase().includes(q)
-        );
-    }, [articleSummary, articleSearch]);
-
     // Filter operator performance by search
     const filteredOperators = useMemo(() => {
         if (!operatorSearch) return operatorPerformance;
@@ -319,8 +294,6 @@ export default function DirectorAnalyticsDashboard({
         );
     }, [operatorPerformance, operatorSearch]);
 
-    // Max values for progress bar scaling
-    const maxArticleTotal = useMemo(() => Math.max(...articleSummary.map(a => a.total), 1), [articleSummary]);
     const maxOperatorTotal = useMemo(() => Math.max(...operatorPerformance.map(o => o.total), 1), [operatorPerformance]);
     const pieceOverview = pieceAnalytics.overview;
 
@@ -588,9 +561,9 @@ export default function DirectorAnalyticsDashboard({
                     </CardContent>
                 </Card>
 
-                {/* Article-wise & Operator-wise Analytics */}
+                {/* QC History & Operator-wise Analytics */}
                 <div className="grid gap-6 lg:grid-cols-2">
-                    {/* Article-wise Pass/Fail Summary */}
+                    {/* QC History */}
                     <Card className="border-border/50 shadow-sm">
                         <CardHeader className="pb-3">
                             <div className="flex items-center justify-between">
@@ -599,69 +572,70 @@ export default function DirectorAnalyticsDashboard({
                                         <Package className="h-5 w-5 text-white" />
                                     </div>
                                     <div>
-                                        <CardTitle className="text-lg">Article-wise Summary</CardTitle>
-                                        <CardDescription className="text-sm">{articleSummary.length} articles inspected</CardDescription>
+                                        <CardTitle className="text-lg">QC history</CardTitle>
+                                        <CardDescription className="text-sm">{qcHistory.length} piece entries shown</CardDescription>
                                     </div>
                                 </div>
-                            </div>
-                            <div className="relative mt-2">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                                <Input
-                                    type="text"
-                                    placeholder="Search articles..."
-                                    value={articleSearch}
-                                    onChange={(e) => setArticleSearch(e.target.value)}
-                                    className="h-10 pl-9 text-sm"
-                                />
                             </div>
                         </CardHeader>
                         <CardContent className="pt-0">
                             <div className="max-h-[420px] overflow-y-auto pr-1 space-y-3">
-                                {filteredArticles.length === 0 ? (
-                                    <p className="text-center text-sm text-slate-400 py-8">No article data available</p>
+                                {qcHistory.length === 0 ? (
+                                    <p className="text-center text-sm text-slate-400 py-8">No QC history available</p>
                                 ) : (
-                                    filteredArticles.map((article, idx) => {
-                                        const passRate = article.total > 0 ? ((article.pass / article.total) * 100) : 0;
+                                    qcHistory.map((piece, idx) => {
+                                        const passed = piece.measurements_passed;
+                                        const failed = piece.measurements_failed;
+                                        const total = piece.total_measurements || (passed + failed);
+                                        const passRate = total > 0 ? (passed / total) * 100 : 0;
+                                        const isPass = piece.piece_result === 'PASS';
                                         return (
                                             <div
-                                                key={`${article.article_style}-${idx}`}
+                                                key={`${piece.piece_session_id}-${idx}`}
                                                 className="rounded-lg border border-slate-100 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-800/30 p-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
                                             >
-                                                <div className="flex items-center justify-between mb-2">
-                                                    <div className="flex items-center gap-2 min-w-0">
-                                                        <span className="font-semibold text-sm text-slate-800 dark:text-slate-200 truncate">
-                                                            {article.article_style}
-                                                        </span>
-                                                        <span className="px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-600 text-[10px] font-medium text-slate-600 dark:text-slate-300 flex-shrink-0">
-                                                            {article.brand_name}
-                                                        </span>
-                                                        {(article.article_type_name || article.size) && (
-                                                            <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-[10px] font-medium text-slate-600 dark:text-slate-300 flex-shrink-0">
-                                                                {[article.article_type_name, article.size].filter(Boolean).join(' • ')}
+                                                <div className="flex items-start justify-between gap-3 mb-2">
+                                                    <div className="min-w-0">
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <span className="font-semibold text-sm text-slate-800 dark:text-slate-200 truncate">
+                                                                {piece.article_style}
                                                             </span>
-                                                        )}
+                                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold flex-shrink-0 ${isPass ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300'}`}>
+                                                                {piece.piece_result}
+                                                            </span>
+                                                        </div>
+                                                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
+                                                            <span className="px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-600">{piece.brand_name}</span>
+                                                            <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700">{[piece.article_type_name, piece.size].filter(Boolean).join(' • ')}</span>
+                                                            {piece.employee_id && (
+                                                                <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700">Op: {piece.employee_id}</span>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                     <span className="text-xs font-medium text-slate-500 flex-shrink-0">
-                                                        {article.total} total
+                                                        {total} measurements
                                                     </span>
                                                 </div>
-                                                <div className="flex items-center gap-4 mb-1.5">
-                                                    <div className="flex items-center gap-1">
-                                                        <div className="h-2 w-2 rounded-full bg-emerald-500" />
-                                                        <span className="text-xs text-slate-600 dark:text-slate-400">{article.pass} pass</span>
+
+                                                <div className="grid grid-cols-3 gap-2 mb-2">
+                                                    <div className="text-center rounded-md bg-white dark:bg-slate-800 p-1.5 border border-slate-100 dark:border-slate-700">
+                                                        <div className="text-xs font-bold text-emerald-700 dark:text-emerald-400">{passed}</div>
+                                                        <div className="text-[9px] text-emerald-600 dark:text-emerald-500 uppercase tracking-wider">Passed</div>
                                                     </div>
-                                                    <div className="flex items-center gap-1">
-                                                        <div className="h-2 w-2 rounded-full bg-rose-500" />
-                                                        <span className="text-xs text-slate-600 dark:text-slate-400">{article.fail} fail</span>
+                                                    <div className="text-center rounded-md bg-white dark:bg-slate-800 p-1.5 border border-slate-100 dark:border-slate-700">
+                                                        <div className="text-xs font-bold text-rose-700 dark:text-rose-400">{failed}</div>
+                                                        <div className="text-[9px] text-rose-600 dark:text-rose-500 uppercase tracking-wider">Failed</div>
                                                     </div>
-                                                    <span className={`ml-auto text-xs font-semibold ${passRate >= 80 ? 'text-emerald-600' : passRate >= 60 ? 'text-amber-600' : 'text-rose-600'}`}>
-                                                        {passRate.toFixed(1)}%
-                                                    </span>
+                                                    <div className="text-center rounded-md bg-white dark:bg-slate-800 p-1.5 border border-slate-100 dark:border-slate-700">
+                                                        <div className="text-xs font-bold text-slate-800 dark:text-slate-200">{passRate.toFixed(1)}%</div>
+                                                        <div className="text-[9px] text-slate-500 uppercase tracking-wider">Pass Rate</div>
+                                                    </div>
                                                 </div>
+
                                                 <div className="relative h-2 w-full rounded-full bg-rose-200 dark:bg-rose-900/30 overflow-hidden">
                                                     <div
-                                                        className="absolute left-0 top-0 h-full rounded-full bg-emerald-500 transition-all duration-700"
-                                                        style={{ width: `${passRate}%` }}
+                                                        className={`absolute left-0 top-0 h-full rounded-full transition-all duration-700 ${isPass ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                                                        style={{ width: `${Math.min(passRate, 100)}%` }}
                                                     />
                                                 </div>
                                             </div>
