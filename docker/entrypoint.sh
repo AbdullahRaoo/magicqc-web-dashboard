@@ -37,7 +37,8 @@ if [ "$1" = "php-fpm" ]; then
             echo "Clearing bootstrap cache..."
             rm -f /var/www/bootstrap/cache/packages.php \
                   /var/www/bootstrap/cache/services.php \
-                  /var/www/bootstrap/cache/config.php
+                  /var/www/bootstrap/cache/config.php \
+                  /var/www/bootstrap/cache/lighthouse-schema.php
 
             echo "$BUILD_HASH" > "$MARKER"
             echo "Sync complete."
