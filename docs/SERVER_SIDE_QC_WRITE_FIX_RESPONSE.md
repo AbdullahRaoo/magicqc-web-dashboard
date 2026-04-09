@@ -77,6 +77,8 @@ Use the verification script in this repo to validate the **actual live endpoint*
 MAGICQC_API_KEY=<your_key> ./scripts/verify-qc-graphql-writes.sh
 ```
 
+Note: This script defaults to local edge probing (`https://127.0.0.1/graphql` + `Host: magicqc.online`) to avoid DNS/network egress issues from the VPS shell.
+
 Optional explicit endpoint form:
 
 ```bash

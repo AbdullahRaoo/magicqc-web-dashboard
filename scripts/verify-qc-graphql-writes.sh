@@ -7,9 +7,11 @@ set -euo pipefail
 #
 # Optional env overrides:
 #   POA_ID=33 MEASUREMENT_ID=31 SIZE=S OPERATOR_ID=2
+#   MAGICQC_HOST_HEADER=magicqc.online
 
-ENDPOINT="${1:-${MAGICQC_GRAPHQL_URL:-https://magicqc.online/graphql}}"
+ENDPOINT="${1:-${MAGICQC_GRAPHQL_URL:-https://127.0.0.1/graphql}}"
 API_KEY="${2:-${MAGICQC_API_KEY:-}}"
+HOST_HEADER="${MAGICQC_HOST_HEADER:-magicqc.online}"
 POA_ID="${POA_ID:-33}"
 MEASUREMENT_ID="${MEASUREMENT_ID:-31}"
 SIZE="${SIZE:-S}"
@@ -39,7 +41,8 @@ PY
 )
 
   local resp
-  resp=$(curl -sS "$ENDPOINT" \
+  resp=$(curl -k -sS "$ENDPOINT" \
+    -H "Host: $HOST_HEADER" \
     -H "Content-Type: application/json" \
     -H "X-API-Key: $API_KEY" \
     --data "$payload")
@@ -108,3 +111,4 @@ if [[ "$rc" -ne 0 ]]; then
 fi
 
 echo "\n✅ QC write probe PASSED against: $ENDPOINT"
+echo "Host header used: $HOST_HEADER"
