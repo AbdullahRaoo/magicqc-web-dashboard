@@ -49,6 +49,9 @@ interface SummaryStats {
 interface PieceArticleSummaryItem {
     article_style: string;
     brand_name: string;
+    article_type_id?: number;
+    article_type_name?: string;
+    size?: string;
     total_pieces: number;
     completed_pieces: number;
     in_progress_pieces: number;
@@ -84,6 +87,9 @@ interface PieceAnalytics {
 interface ArticleSummaryItem {
     article_style: string;
     brand_name: string;
+    article_type_id?: number;
+    article_type_name?: string;
+    size?: string;
     total: number;
     pass: number;
     fail: number;
@@ -99,13 +105,17 @@ interface OperatorPerformanceItem {
 
 interface FilterOptions {
     brands: { id: number; name: string }[];
+    articleTypes?: { id: number; name: string }[];
     articleStyles: string[];
+    sizes?: string[];
     operators: { id: number; full_name: string; employee_id: string }[];
 }
 
 interface AppliedFilters {
     brand_id: string | null;
+    article_type_id?: string | null;
     article_style: string | null;
+    size?: string | null;
     operator_id: string | null;
     date_from: string | null;
     date_to: string | null;
@@ -228,7 +238,9 @@ export default function DirectorAnalyticsDashboard({
     // Local filter state
     const [filters, setFilters] = useState({
         brand_id: appliedFilters.brand_id || '',
+        article_type_id: appliedFilters.article_type_id || '',
         article_style: appliedFilters.article_style || '',
+        size: appliedFilters.size || '',
         operator_id: appliedFilters.operator_id || '',
         date_from: appliedFilters.date_from || '',
         date_to: appliedFilters.date_to || '',
@@ -264,7 +276,9 @@ export default function DirectorAnalyticsDashboard({
     const resetFilters = useCallback(() => {
         setFilters({
             brand_id: '',
+            article_type_id: '',
             article_style: '',
+            size: '',
             operator_id: '',
             date_from: '',
             date_to: '',
@@ -301,7 +315,11 @@ export default function DirectorAnalyticsDashboard({
         if (!articleSearch) return articleSummary;
         const q = articleSearch.toLowerCase();
         return articleSummary.filter(
-            a => a.article_style.toLowerCase().includes(q) || a.brand_name.toLowerCase().includes(q)
+            a =>
+                a.article_style.toLowerCase().includes(q) ||
+                a.brand_name.toLowerCase().includes(q) ||
+                (a.article_type_name || '').toLowerCase().includes(q) ||
+                (a.size || '').toLowerCase().includes(q)
         );
     }, [articleSummary, articleSearch]);
 
@@ -309,7 +327,11 @@ export default function DirectorAnalyticsDashboard({
         if (!pieceSearch) return pieceAnalytics.byArticle;
         const q = pieceSearch.toLowerCase();
         return pieceAnalytics.byArticle.filter(
-            p => p.article_style.toLowerCase().includes(q) || p.brand_name.toLowerCase().includes(q)
+            p =>
+                p.article_style.toLowerCase().includes(q) ||
+                p.brand_name.toLowerCase().includes(q) ||
+                (p.article_type_name || '').toLowerCase().includes(q) ||
+                (p.size || '').toLowerCase().includes(q)
         );
     }, [pieceAnalytics.byArticle, pieceSearch]);
 
@@ -403,7 +425,7 @@ export default function DirectorAnalyticsDashboard({
                     </CardHeader>
                     {showFilters && (
                         <CardContent className="pt-0">
-                            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-9 gap-4">
                                 <div className="space-y-1.5">
                                     <Label className="text-xs font-medium text-slate-600">Brand</Label>
                                     <select
@@ -419,6 +441,20 @@ export default function DirectorAnalyticsDashboard({
                                 </div>
 
                                 <div className="space-y-1.5">
+                                    <Label className="text-xs font-medium text-slate-600">Article Type</Label>
+                                    <select
+                                        value={filters.article_type_id}
+                                        onChange={(e) => setFilters({ ...filters, article_type_id: e.target.value })}
+                                        className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus:outline-none focus:ring-1 focus:ring-ring"
+                                    >
+                                        <option value="">All Types</option>
+                                        {(filterOptions.articleTypes || []).map((type) => (
+                                            <option key={type.id} value={type.id}>{type.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="space-y-1.5">
                                     <Label className="text-xs font-medium text-slate-600">Article Style</Label>
                                     <select
                                         value={filters.article_style}
@@ -428,6 +464,20 @@ export default function DirectorAnalyticsDashboard({
                                         <option value="">All Articles</option>
                                         {filterOptions.articleStyles.map((s) => (
                                             <option key={s} value={s}>{s}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs font-medium text-slate-600">Size</Label>
+                                    <select
+                                        value={filters.size}
+                                        onChange={(e) => setFilters({ ...filters, size: e.target.value })}
+                                        className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus:outline-none focus:ring-1 focus:ring-ring"
+                                    >
+                                        <option value="">All Sizes</option>
+                                        {(filterOptions.sizes || []).map((size) => (
+                                            <option key={size} value={size}>{size}</option>
                                         ))}
                                     </select>
                                 </div>
@@ -510,18 +560,18 @@ export default function DirectorAnalyticsDashboard({
 
                 {/* Summary KPI Cards */}
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    {/* Total Measurements */}
+                    {/* Total Parameter Checks */}
                     <Card className="group relative overflow-hidden border shadow-md border-slate-200 dark:border-slate-700 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg">
                         <div className="absolute inset-0 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900" />
                         <CardHeader className="relative z-10 flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">Total Measurements</CardTitle>
+                            <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">Total Parameter Checks</CardTitle>
                             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white dark:bg-slate-700 shadow-sm">
                                 <ClipboardList className="h-5 w-5 text-slate-600 dark:text-slate-400" />
                             </div>
                         </CardHeader>
                         <CardContent className="relative z-10">
                             <div className="text-4xl font-bold text-slate-800 dark:text-white">{summary.total.toLocaleString()}</div>
-                            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Records analyzed</p>
+                            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Measurement points analyzed</p>
                         </CardContent>
                         <div className="absolute -bottom-8 -right-8 h-24 w-24 rounded-full bg-slate-200/50 dark:bg-slate-600/20 blur-xl" />
                     </Card>
@@ -660,7 +710,11 @@ export default function DirectorAnalyticsDashboard({
                                                         <div className="flex items-center justify-between mb-2">
                                                             <div className="min-w-0">
                                                                 <div className="font-semibold text-sm text-slate-800 dark:text-slate-200 truncate">{piece.article_style}</div>
-                                                                <div className="text-[11px] text-slate-500">{piece.brand_name}</div>
+                                                                <div className="text-[11px] text-slate-500">
+                                                                    {piece.brand_name}
+                                                                    {piece.article_type_name ? ` • ${piece.article_type_name}` : ''}
+                                                                    {piece.size ? ` • ${piece.size}` : ''}
+                                                                </div>
                                                             </div>
                                                             <div className="text-right text-xs text-slate-500">
                                                                 <div>{piece.total_pieces} pieces</div>
@@ -886,6 +940,11 @@ export default function DirectorAnalyticsDashboard({
                                                         <span className="px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-600 text-[10px] font-medium text-slate-600 dark:text-slate-300 flex-shrink-0">
                                                             {article.brand_name}
                                                         </span>
+                                                        {(article.article_type_name || article.size) && (
+                                                            <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-[10px] font-medium text-slate-600 dark:text-slate-300 flex-shrink-0">
+                                                                {[article.article_type_name, article.size].filter(Boolean).join(' • ')}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                     <span className="text-xs font-medium text-slate-500 flex-shrink-0">
                                                         {article.total} total

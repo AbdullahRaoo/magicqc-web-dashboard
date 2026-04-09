@@ -82,6 +82,10 @@ class UpsertMeasurementResultsDetailed
             $hasPieceSessionId = DB::getSchemaBuilder()->hasColumn('measurement_results', 'piece_session_id');
             $hasArticleStyle = DB::getSchemaBuilder()->hasColumn('measurement_results', 'article_style');
 
+            if (!$hasPieceSessionId) {
+                throw new \RuntimeException('MIGRATION REQUIRED: piece_session_id column missing from measurement_results table. Run: php artisan migrate');
+            }
+
             // --- AUTO-AGGREGATION FOR OVERALL DASHBOARD ---
             // Group all sides for THIS piece from detailed results
             $allDetailed = DB::table('measurement_results_detailed')
@@ -131,9 +135,7 @@ class UpsertMeasurementResultsDetailed
             }
 
             if (!empty($overallRows)) {
-                $upsertKey = $hasPieceSessionId 
-                    ? ['piece_session_id', 'purchase_order_article_id', 'measurement_id', 'size']
-                    : ['purchase_order_article_id', 'measurement_id', 'size'];
+                $upsertKey = ['piece_session_id', 'purchase_order_article_id', 'measurement_id', 'size'];
                 
                 $updateColumns = ['status', 'operator_id'];
                 if ($hasArticleStyle) {

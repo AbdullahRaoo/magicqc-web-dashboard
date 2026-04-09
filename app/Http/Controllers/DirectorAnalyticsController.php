@@ -272,7 +272,9 @@ class DirectorAnalyticsController extends Controller
     {
         return [
             'brand_id' => $request->input('brand_id'),
+            'article_type_id' => $request->input('article_type_id'),
             'article_style' => $request->input('article_style'),
+            'size' => $request->input('size'),
             'operator_id' => $request->input('operator_id'),
             'date_from' => $request->input('date_from'),
             'date_to' => $request->input('date_to'),
@@ -292,15 +294,22 @@ class DirectorAnalyticsController extends Controller
         $query = DB::table(DB::raw("({$latestSessions}) as ms"))
             ->join('purchase_order_articles as poa', 'ms.purchase_order_article_id', '=', 'poa.id')
             ->join('purchase_orders as po', 'poa.purchase_order_id', '=', 'po.id')
+            ->leftJoin('article_types as at', 'poa.article_type_id', '=', 'at.id')
             ->leftJoin('brands as b', 'po.brand_id', '=', 'b.id')
             ->leftJoin('operators as o', 'ms.operator_id', '=', 'o.id')
-            ->selectRaw("\n                ms.purchase_order_article_id,\n                ms.size,\n                poa.article_style,\n                COALESCE(b.name, 'Unknown') as brand_name,\n                o.full_name as operator_name,\n                ms.status,\n                ms.front_side_complete,\n                ms.back_side_complete,\n                ms.front_qc_result,\n                ms.back_qc_result,\n                ms.created_at,\n                ms.updated_at\n            ");
+            ->selectRaw("\n                ms.purchase_order_article_id,\n                ms.size,\n                poa.article_style,\n                poa.article_type_id,\n                COALESCE(at.name, 'Unknown') as article_type_name,\n                COALESCE(b.name, 'Unknown') as brand_name,\n                o.full_name as operator_name,\n                ms.status,\n                ms.front_side_complete,\n                ms.back_side_complete,\n                ms.front_qc_result,\n                ms.back_qc_result,\n                ms.created_at,\n                ms.updated_at\n            ");
 
         if (!empty($filters['brand_id'])) {
             $query->where('po.brand_id', $filters['brand_id']);
         }
+        if (!empty($filters['article_type_id'])) {
+            $query->where('poa.article_type_id', $filters['article_type_id']);
+        }
         if (!empty($filters['article_style'])) {
             $query->where('poa.article_style', $filters['article_style']);
+        }
+        if (!empty($filters['size'])) {
+            $query->where('ms.size', $filters['size']);
         }
         if (!empty($filters['operator_id'])) {
             $query->where('ms.operator_id', $filters['operator_id']);
@@ -388,8 +397,8 @@ class DirectorAnalyticsController extends Controller
         $pendingPieces = max($totalPieces - $passPieces - $failPieces, 0);
 
         $articleRows = (clone $base)
-            ->selectRaw("\n                poa.article_style,\n                COALESCE(b.name, 'Unknown') as brand_name,\n                COUNT(*) as total_pieces,\n                SUM(CASE WHEN ms.status = 'completed' THEN 1 ELSE 0 END) as completed_pieces,\n                SUM(CASE WHEN ms.status = 'in_progress' THEN 1 ELSE 0 END) as in_progress_pieces,\n                SUM(CASE WHEN ms.front_qc_result = 'PASS' AND ms.back_qc_result = 'PASS' THEN 1 ELSE 0 END) as pass_pieces,\n                SUM(CASE WHEN ms.front_qc_result = 'FAIL' OR ms.back_qc_result = 'FAIL' THEN 1 ELSE 0 END) as fail_pieces,\n                SUM(CASE WHEN ms.front_side_complete = 1 THEN 1 ELSE 0 END) as front_complete_pieces,\n                SUM(CASE WHEN ms.back_side_complete = 1 THEN 1 ELSE 0 END) as back_complete_pieces\n            ")
-            ->groupBy('poa.article_style', 'b.name')
+            ->selectRaw("\n                poa.article_style,\n                COALESCE(b.name, 'Unknown') as brand_name,\n                poa.article_type_id,\n                COALESCE(at.name, 'Unknown') as article_type_name,\n                ms.size,\n                COUNT(*) as total_pieces,\n                SUM(CASE WHEN ms.status = 'completed' THEN 1 ELSE 0 END) as completed_pieces,\n                SUM(CASE WHEN ms.status = 'in_progress' THEN 1 ELSE 0 END) as in_progress_pieces,\n                SUM(CASE WHEN ms.front_qc_result = 'PASS' AND ms.back_qc_result = 'PASS' THEN 1 ELSE 0 END) as pass_pieces,\n                SUM(CASE WHEN ms.front_qc_result = 'FAIL' OR ms.back_qc_result = 'FAIL' THEN 1 ELSE 0 END) as fail_pieces,\n                SUM(CASE WHEN ms.front_side_complete = 1 THEN 1 ELSE 0 END) as front_complete_pieces,\n                SUM(CASE WHEN ms.back_side_complete = 1 THEN 1 ELSE 0 END) as back_complete_pieces\n            ")
+            ->groupBy('poa.article_style', 'b.name', 'poa.article_type_id', 'at.name', 'ms.size')
             ->orderByDesc('total_pieces')
             ->get()
             ->map(function ($row) {
@@ -400,6 +409,9 @@ class DirectorAnalyticsController extends Controller
                 return [
                     'article_style' => $row->article_style,
                     'brand_name' => $row->brand_name,
+                    'article_type_id' => (int) ($row->article_type_id ?? 0),
+                    'article_type_name' => $row->article_type_name,
+                    'size' => $row->size,
                     'total_pieces' => $total,
                     'completed_pieces' => (int) $row->completed_pieces,
                     'in_progress_pieces' => (int) $row->in_progress_pieces,
@@ -450,6 +462,14 @@ class DirectorAnalyticsController extends Controller
         if (!empty($filters['article_style'])) {
             $where[] = 'poa.article_style = ?';
             $bindings[] = $filters['article_style'];
+        }
+        if (!empty($filters['article_type_id'])) {
+            $where[] = 'poa.article_type_id = ?';
+            $bindings[] = $filters['article_type_id'];
+        }
+        if (!empty($filters['size'])) {
+            $where[] = 'mr.size = ?';
+            $bindings[] = $filters['size'];
         }
         if (!empty($filters['operator_id'])) {
             $where[] = 'mr.operator_id = ?';
@@ -526,15 +546,19 @@ class DirectorAnalyticsController extends Controller
             SELECT
                 poa.article_style,
                 COALESCE(b.name, 'Unknown') as brand_name,
+                    poa.article_type_id,
+                    COALESCE(at.name, 'Unknown') as article_type_name,
+                    mr.size,
                 COUNT(*) as total,
                 SUM(CASE WHEN mr.status = 'PASS' THEN 1 ELSE 0 END) as pass,
                 SUM(CASE WHEN mr.status = 'FAIL' THEN 1 ELSE 0 END) as fail
             FROM ({$latestMr}) mr
             JOIN purchase_order_articles poa ON mr.purchase_order_article_id = poa.id
             JOIN purchase_orders po ON poa.purchase_order_id = po.id
+            LEFT JOIN article_types at ON poa.article_type_id = at.id
             LEFT JOIN brands b ON po.brand_id = b.id
             {$mrWhere}
-            GROUP BY poa.article_style, b.name
+                GROUP BY poa.article_style, b.name, poa.article_type_id, at.name, mr.size
             ORDER BY total DESC
         ", $mrBindings);
 
@@ -596,12 +620,23 @@ class DirectorAnalyticsController extends Controller
             ->select('purchase_order_articles.article_style')
             ->distinct()->pluck('article_style')->toArray();
 
+        $mrSizes = DB::table('measurement_results')
+            ->select('size')
+            ->whereNotNull('size')
+            ->distinct()->pluck('size')->toArray();
+
         $allStyles = collect($mrStyles)
+            ->unique()->sort()->values()->toArray();
+
+        $allSizes = collect($mrSizes)
+            ->filter(fn($size) => $size !== '')
             ->unique()->sort()->values()->toArray();
 
         return [
             'brands' => Brand::select('id', 'name')->orderBy('name')->get()->toArray(),
+            'articleTypes' => DB::table('article_types')->select('id', 'name')->orderBy('name')->get()->toArray(),
             'articleStyles' => $allStyles,
+            'sizes' => $allSizes,
             'operators' => Operator::select('id', 'full_name', 'employee_id')
                 ->orderBy('full_name')
                 ->get()
@@ -725,6 +760,14 @@ class DirectorAnalyticsController extends Controller
         if (!empty($filters['article_style'])) {
             $where[] = 'mrd.article_style = ?';
             $bindings[] = $filters['article_style'];
+        }
+        if (!empty($filters['article_type_id'])) {
+            $where[] = 'poa.article_type_id = ?';
+            $bindings[] = $filters['article_type_id'];
+        }
+        if (!empty($filters['size'])) {
+            $where[] = 'mrd.size = ?';
+            $bindings[] = $filters['size'];
         }
         if (!empty($filters['operator_id'])) {
             $where[] = 'mrd.operator_id = ?';
