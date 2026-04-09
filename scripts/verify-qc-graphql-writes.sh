@@ -86,14 +86,37 @@ raise SystemExit(6)
 PY
 }
 
-MUTATION_RESULTS='mutation SaveTest($results: [MeasurementResultInput!]!) {\n  upsertMeasurementResults(results: $results) {\n    success\n    message\n    count\n  }\n}'
+MUTATION_RESULTS=$(cat <<'GRAPHQL'
+mutation SaveTest($results: [MeasurementResultInput!]!) {
+  upsertMeasurementResults(results: $results) {
+    success
+    message
+    count
+  }
+}
+GRAPHQL
+)
 
 VARS_RESULTS=$(cat <<JSON
 {"results":[{"purchase_order_article_id":$POA_ID,"measurement_id":$MEASUREMENT_ID,"size":"$SIZE","measured_value":7.47,"status":"PASS","operator_id":$OPERATOR_ID}]}
 JSON
 )
 
-MUTATION_DETAILED='mutation SaveDetailed($poa:Int!, $size:String!, $side:String!, $results:[DetailedResultInput!]!) {\n  upsertMeasurementResultsDetailed(purchase_order_article_id:$poa, size:$size, side:$side, results:$results) {\n    success\n    message\n    count\n  }\n}'
+MUTATION_DETAILED=$(cat <<'GRAPHQL'
+mutation SaveDetailed($poa:Int!, $size:String!, $side:String!, $results:[DetailedResultInput!]!) {
+  upsertMeasurementResultsDetailed(
+    purchase_order_article_id:$poa,
+    size:$size,
+    side:$side,
+    results:$results
+  ) {
+    success
+    message
+    count
+  }
+}
+GRAPHQL
+)
 
 VARS_DETAILED=$(cat <<JSON
 {"poa":$POA_ID,"size":"$SIZE","side":"front","results":[{"measurement_id":$MEASUREMENT_ID,"measured_value":7.47,"expected_value":7.40,"tol_plus":0.20,"tol_minus":0.20,"status":"PASS","operator_id":$OPERATOR_ID}]}
