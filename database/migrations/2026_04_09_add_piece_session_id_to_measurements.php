@@ -2,10 +2,21 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    private function indexExists(string $table, string $indexName): bool
+    {
+        $row = DB::selectOne(
+            'SELECT COUNT(1) as aggregate FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?',
+            [$table, $indexName]
+        );
+
+        return (int) ($row->aggregate ?? 0) > 0;
+    }
+
     /**
      * Add piece_session_id to track individual pieces/cycles.
      * 
@@ -40,8 +51,19 @@ return new class extends Migration
             Schema::table('measurement_results', function (Blueprint $table) {
                 $table->char('piece_session_id', 36)->nullable()->after('size')->comment('UUID: unique identifier for this physical piece');
                 $table->index('piece_session_id');
-                // Drop old unique key
-                $table->dropUnique(['purchase_order_article_id', 'measurement_id', 'size']);
+            });
+
+            if ($this->indexExists('measurement_results', 'unique_measurement')) {
+                Schema::table('measurement_results', function (Blueprint $table) {
+                    $table->dropUnique('unique_measurement');
+                });
+            } elseif ($this->indexExists('measurement_results', 'measurement_results_purchase_order_article_id_measurement_id_size_unique')) {
+                Schema::table('measurement_results', function (Blueprint $table) {
+                    $table->dropUnique('measurement_results_purchase_order_article_id_measurement_id_size_unique');
+                });
+            }
+
+            Schema::table('measurement_results', function (Blueprint $table) {
                 // Add new unique key including piece_session_id
                 $table->unique(['piece_session_id', 'purchase_order_article_id', 'measurement_id', 'size'], 'uq_mr_piece_session');
             });

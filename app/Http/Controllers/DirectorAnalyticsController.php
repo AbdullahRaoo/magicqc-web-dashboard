@@ -297,7 +297,7 @@ class DirectorAnalyticsController extends Controller
             ->leftJoin('article_types as at', 'poa.article_type_id', '=', 'at.id')
             ->leftJoin('brands as b', 'po.brand_id', '=', 'b.id')
             ->leftJoin('operators as o', 'ms.operator_id', '=', 'o.id')
-            ->selectRaw("\n                ms.purchase_order_article_id,\n                ms.size,\n                poa.article_style,\n                poa.article_type_id,\n                COALESCE(at.name, 'Unknown') as article_type_name,\n                COALESCE(b.name, 'Unknown') as brand_name,\n                o.full_name as operator_name,\n                ms.status,\n                ms.front_side_complete,\n                ms.back_side_complete,\n                ms.front_qc_result,\n                ms.back_qc_result,\n                CASE\n                    WHEN ms.front_qc_result = 'PASS' AND ms.back_qc_result = 'PASS' THEN 'PASS'\n                    WHEN ms.front_qc_result = 'FAIL' OR ms.back_qc_result = 'FAIL' THEN 'FAIL'\n                    ELSE 'PENDING'\n                END as piece_result,\n                ms.created_at,\n                ms.updated_at\n            ");
+            ->selectRaw("\n                ms.purchase_order_article_id,\n                ms.size,\n                poa.article_style,\n                poa.article_type_id,\n                COALESCE(at.name, 'Unknown') as article_type_name,\n                COALESCE(b.name, 'Unknown') as brand_name,\n                o.full_name as operator_name,\n                o.employee_id,\n                ms.status,\n                ms.front_side_complete,\n                ms.back_side_complete,\n                ms.front_qc_result,\n                ms.back_qc_result,\n                CASE\n                    WHEN ms.front_qc_result = 'PASS' AND ms.back_qc_result = 'PASS' THEN 'PASS'\n                    WHEN ms.front_qc_result = 'FAIL' OR ms.back_qc_result = 'FAIL' THEN 'FAIL'\n                    ELSE 'PENDING'\n                END as piece_result,\n                ms.created_at,\n                ms.updated_at\n            ");
 
         if (!empty($filters['brand_id'])) {
             $query->where('po.brand_id', $filters['brand_id']);
@@ -397,9 +397,10 @@ class DirectorAnalyticsController extends Controller
         $failPieces = (int) ($summary->fail_pieces ?? 0);
         $pendingPieces = max($totalPieces - $passPieces - $failPieces, 0);
 
-        $articleRows = (clone $base)
-            ->selectRaw("\n                poa.article_style,\n                COALESCE(b.name, 'Unknown') as brand_name,\n                poa.article_type_id,\n                COALESCE(at.name, 'Unknown') as article_type_name,\n                ms.size,\n                COUNT(*) as total_pieces,\n                SUM(CASE WHEN ms.status = 'completed' THEN 1 ELSE 0 END) as completed_pieces,\n                SUM(CASE WHEN ms.status = 'in_progress' THEN 1 ELSE 0 END) as in_progress_pieces,\n                SUM(CASE WHEN ms.front_qc_result = 'PASS' AND ms.back_qc_result = 'PASS' THEN 1 ELSE 0 END) as pass_pieces,\n                SUM(CASE WHEN ms.front_qc_result = 'FAIL' OR ms.back_qc_result = 'FAIL' THEN 1 ELSE 0 END) as fail_pieces,\n                SUM(CASE WHEN ms.front_side_complete = 1 THEN 1 ELSE 0 END) as front_complete_pieces,\n                SUM(CASE WHEN ms.back_side_complete = 1 THEN 1 ELSE 0 END) as back_complete_pieces\n            ")
-            ->groupBy('poa.article_style', 'b.name', 'poa.article_type_id', 'at.name', 'ms.size')
+        $articleRows = DB::query()
+            ->fromSub(clone $base, 'pieces')
+            ->selectRaw("\n                pieces.article_style,\n                pieces.brand_name,\n                pieces.article_type_id,\n                pieces.article_type_name,\n                pieces.size,\n                COUNT(*) as total_pieces,\n                SUM(CASE WHEN pieces.status = 'completed' THEN 1 ELSE 0 END) as completed_pieces,\n                SUM(CASE WHEN pieces.status = 'in_progress' THEN 1 ELSE 0 END) as in_progress_pieces,\n                SUM(CASE WHEN pieces.piece_result = 'PASS' THEN 1 ELSE 0 END) as pass_pieces,\n                SUM(CASE WHEN pieces.piece_result = 'FAIL' THEN 1 ELSE 0 END) as fail_pieces,\n                SUM(CASE WHEN pieces.front_side_complete = 1 THEN 1 ELSE 0 END) as front_complete_pieces,\n                SUM(CASE WHEN pieces.back_side_complete = 1 THEN 1 ELSE 0 END) as back_complete_pieces\n            ")
+            ->groupBy('pieces.article_style', 'pieces.brand_name', 'pieces.article_type_id', 'pieces.article_type_name', 'pieces.size')
             ->orderByDesc('total_pieces')
             ->get()
             ->map(function ($row) {
@@ -535,9 +536,10 @@ class DirectorAnalyticsController extends Controller
     {
         $base = $this->buildPieceQuery($filters);
 
-        return (clone $base)
-            ->selectRaw("\n                poa.article_style,\n                COALESCE(b.name, 'Unknown') as brand_name,\n                poa.article_type_id,\n                COALESCE(at.name, 'Unknown') as article_type_name,\n                ms.size,\n                COUNT(*) as total,\n                SUM(CASE WHEN piece_result = 'PASS' THEN 1 ELSE 0 END) as pass,\n                SUM(CASE WHEN piece_result = 'FAIL' THEN 1 ELSE 0 END) as fail\n            ")
-            ->groupBy('poa.article_style', 'b.name', 'poa.article_type_id', 'at.name', 'ms.size')
+        return DB::query()
+            ->fromSub(clone $base, 'pieces')
+            ->selectRaw("\n                pieces.article_style,\n                pieces.brand_name,\n                pieces.article_type_id,\n                pieces.article_type_name,\n                pieces.size,\n                COUNT(*) as total,\n                SUM(CASE WHEN pieces.piece_result = 'PASS' THEN 1 ELSE 0 END) as pass,\n                SUM(CASE WHEN pieces.piece_result = 'FAIL' THEN 1 ELSE 0 END) as fail\n            ")
+            ->groupBy('pieces.article_style', 'pieces.brand_name', 'pieces.article_type_id', 'pieces.article_type_name', 'pieces.size')
             ->orderByDesc('total')
             ->get()
             ->map(function ($row) {
@@ -563,10 +565,11 @@ class DirectorAnalyticsController extends Controller
     {
         $base = $this->buildPieceQuery($filters);
 
-        return (clone $base)
-            ->whereNotNull('ms.operator_id')
-            ->selectRaw("\n                o.full_name as operator_name,\n                o.employee_id,\n                COUNT(*) as total,\n                SUM(CASE WHEN piece_result = 'PASS' THEN 1 ELSE 0 END) as pass,\n                SUM(CASE WHEN piece_result = 'FAIL' THEN 1 ELSE 0 END) as fail\n            ")
-            ->groupBy('o.full_name', 'o.employee_id')
+        return DB::query()
+            ->fromSub(clone $base, 'pieces')
+            ->whereNotNull('pieces.operator_name')
+            ->selectRaw("\n                pieces.operator_name,\n                pieces.employee_id,\n                COUNT(*) as total,\n                SUM(CASE WHEN pieces.piece_result = 'PASS' THEN 1 ELSE 0 END) as pass,\n                SUM(CASE WHEN pieces.piece_result = 'FAIL' THEN 1 ELSE 0 END) as fail\n            ")
+            ->groupBy('pieces.operator_name', 'pieces.employee_id')
             ->orderByDesc('total')
             ->get()
             ->map(function ($row) {
