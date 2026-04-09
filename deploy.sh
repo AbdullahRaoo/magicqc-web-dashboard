@@ -28,6 +28,9 @@ echo ""
 echo "[3/5] Stopping containers..."
 docker-compose down
 
+echo "Resetting shared sync marker..."
+rm -f .last_sync_hash
+
 # 4. Start all services
 echo ""
 echo "[4/5] Starting containers..."

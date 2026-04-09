@@ -18,7 +18,9 @@ if [ "$1" = "php-fpm" ]; then
         flock -x -w 120 200
 
         MARKER="/var/www/.last_sync_hash"
-        BUILD_HASH=$(md5sum /tmp/vendor-output/autoload.php 2>/dev/null | awk '{print $1}' || echo "none")
+        VENDOR_HASH=$(md5sum /tmp/vendor-output/autoload.php 2>/dev/null | awk '{print $1}' || echo "no-vendor")
+        ASSET_HASH=$(md5sum /tmp/build-output/manifest.json 2>/dev/null | awk '{print $1}' || echo "no-assets")
+        BUILD_HASH="${VENDOR_HASH}:${ASSET_HASH}"
         CURRENT_HASH=$(cat "$MARKER" 2>/dev/null || echo "")
 
         if [ "$BUILD_HASH" != "$CURRENT_HASH" ]; then
