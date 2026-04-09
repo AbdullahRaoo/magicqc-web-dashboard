@@ -6,7 +6,7 @@ set -euo pipefail
 #   ./scripts/verify-qc-graphql-writes.sh <endpoint> <api-key>
 #
 # Optional env overrides:
-#   POA_ID=33 MEASUREMENT_ID=31 SIZE=S OPERATOR_ID=2
+#   POA_ID=33 MEASUREMENT_ID=31 SIZE=S OPERATOR_ID=2 PIECE_SESSION_ID=...
 #   MAGICQC_HOST_HEADER=magicqc.online
 
 ENDPOINT="${1:-${MAGICQC_GRAPHQL_URL:-https://127.0.0.1/graphql}}"
@@ -16,6 +16,7 @@ POA_ID="${POA_ID:-33}"
 MEASUREMENT_ID="${MEASUREMENT_ID:-31}"
 SIZE="${SIZE:-S}"
 OPERATOR_ID="${OPERATOR_ID:-2}"
+PIECE_SESSION_ID="${PIECE_SESSION_ID:-550e8400-e29b-41d4-a716-446655440000}"
 
 if [[ -z "$API_KEY" ]]; then
   echo "❌ Missing API key. Provide as second arg or set MAGICQC_API_KEY." >&2
@@ -86,6 +87,31 @@ raise SystemExit(6)
 PY
 }
 
+MUTATION_SESSION=$(cat <<'GRAPHQL'
+mutation SaveSession($piece_session_id: String!, $poa: Int!, $size: String!, $operator_id: Int) {
+  upsertMeasurementSession(
+    piece_session_id: $piece_session_id
+    purchase_order_article_id: $poa
+    size: $size
+    operator_id: $operator_id
+    status: "in_progress"
+    front_side_complete: false
+    back_side_complete: false
+    front_qc_result: "PENDING"
+    back_qc_result: "PENDING"
+  ) {
+    success
+    message
+  }
+}
+GRAPHQL
+)
+
+VARS_SESSION=$(cat <<JSON
+{"piece_session_id":"$PIECE_SESSION_ID","poa":$POA_ID,"size":"$SIZE","operator_id":$OPERATOR_ID}
+JSON
+)
+
 MUTATION_RESULTS=$(cat <<'GRAPHQL'
 mutation SaveTest($results: [MeasurementResultInput!]!) {
   upsertMeasurementResults(results: $results) {
@@ -98,13 +124,14 @@ GRAPHQL
 )
 
 VARS_RESULTS=$(cat <<JSON
-{"results":[{"purchase_order_article_id":$POA_ID,"measurement_id":$MEASUREMENT_ID,"size":"$SIZE","measured_value":7.47,"status":"PASS","operator_id":$OPERATOR_ID}]}
+{"results":[{"piece_session_id":"$PIECE_SESSION_ID","purchase_order_article_id":$POA_ID,"measurement_id":$MEASUREMENT_ID,"size":"$SIZE","measured_value":7.47,"status":"PASS","operator_id":$OPERATOR_ID}]}
 JSON
 )
 
 MUTATION_DETAILED=$(cat <<'GRAPHQL'
-mutation SaveDetailed($poa:Int!, $size:String!, $side:String!, $results:[DetailedResultInput!]!) {
+mutation SaveDetailed($piece_session_id: String!, $poa:Int!, $size:String!, $side:String!, $results:[DetailedResultInput!]!) {
   upsertMeasurementResultsDetailed(
+    piece_session_id: $piece_session_id
     purchase_order_article_id:$poa,
     size:$size,
     side:$side,
@@ -119,11 +146,12 @@ GRAPHQL
 )
 
 VARS_DETAILED=$(cat <<JSON
-{"poa":$POA_ID,"size":"$SIZE","side":"front","results":[{"measurement_id":$MEASUREMENT_ID,"measured_value":7.47,"expected_value":7.40,"tol_plus":0.20,"tol_minus":0.20,"status":"PASS","operator_id":$OPERATOR_ID}]}
+{"piece_session_id":"$PIECE_SESSION_ID","poa":$POA_ID,"size":"$SIZE","side":"front","results":[{"measurement_id":$MEASUREMENT_ID,"measured_value":7.47,"expected_value":7.40,"tol_plus":0.20,"tol_minus":0.20,"status":"PASS","operator_id":$OPERATOR_ID}]}
 JSON
 )
 
 rc=0
+run_probe "upsertMeasurementSession" "$MUTATION_SESSION" "$VARS_SESSION" "upsertMeasurementSession" || rc=$?
 run_probe "upsertMeasurementResults" "$MUTATION_RESULTS" "$VARS_RESULTS" "upsertMeasurementResults" || rc=$?
 run_probe "upsertMeasurementResultsDetailed" "$MUTATION_DETAILED" "$VARS_DETAILED" "upsertMeasurementResultsDetailed" || rc=$?
 

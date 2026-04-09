@@ -157,6 +157,7 @@ type InspectionRecord {
 
 type MeasurementResult {
     id: ID
+    piece_session_id: String
     purchase_order_article_id: Int
     measurement_id: Int
     size: String
@@ -173,6 +174,7 @@ type MeasurementResult {
 
 type MeasurementResultDetailed {
     id: ID
+    piece_session_id: String
     purchase_order_article_id: Int
     measurement_id: Int
     size: String
@@ -190,6 +192,7 @@ type MeasurementResultDetailed {
 
 type MeasurementSession {
     id: ID
+    piece_session_id: String
     purchase_order_article_id: Int
     size: String
     article_style: String
@@ -320,8 +323,9 @@ type Mutation {
         results: [MeasurementResultInput!]!
     ): MutationResponse! @guard(with: ["api-key"])
 
-    "Save per-side detailed measurement results (DELETE + INSERT)."
+    "Save per-side detailed measurement results."
     upsertMeasurementResultsDetailed(
+        piece_session_id: String!
         purchase_order_article_id: Int!
         size: String!
         side: String!
@@ -330,6 +334,7 @@ type Mutation {
 
     "Upsert a QC measurement session."
     upsertMeasurementSession(
+        piece_session_id: String!
         purchase_order_article_id: Int!
         size: String!
         article_style: String
@@ -356,6 +361,7 @@ type Mutation {
 # ===========================================================================
 
 input MeasurementResultInput {
+    piece_session_id: String!
     purchase_order_article_id: Int!
     measurement_id: Int!
     size: String!

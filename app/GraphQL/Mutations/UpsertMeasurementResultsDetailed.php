@@ -8,6 +8,15 @@ class UpsertMeasurementResultsDetailed
 {
     public function __invoke($_, array $args): array
     {
+        $pieceSessionId = $args['piece_session_id'] ?? null;
+        if (!$pieceSessionId) {
+            return [
+                'success' => false,
+                'message' => 'piece_session_id is required',
+                'count' => 0,
+            ];
+        }
+
         $poArticleId = $args['purchase_order_article_id'];
         $size = $args['size'];
         $side = $args['side'];
@@ -16,16 +25,19 @@ class UpsertMeasurementResultsDetailed
         try {
             DB::beginTransaction();
 
-            // Delete existing results for this combination
+            // Delete existing results ONLY for this piece_session_id + side combination
+            // This preserves history for other pieces
             DB::table('measurement_results_detailed')
+                ->where('piece_session_id', $pieceSessionId)
                 ->where('purchase_order_article_id', $poArticleId)
                 ->where('size', $size)
                 ->where('side', $side)
                 ->delete();
 
-            // Insert new results
-            $rows = array_map(function ($r) use ($poArticleId, $size, $side) {
+            // Insert new results with piece_session_id
+            $rows = array_map(function ($r) use ($pieceSessionId, $poArticleId, $size, $side) {
                 return [
+                    'piece_session_id' => $pieceSessionId,
                     'purchase_order_article_id' => $poArticleId,
                     'measurement_id' => $r['measurement_id'],
                     'size' => $size,
@@ -47,6 +59,7 @@ class UpsertMeasurementResultsDetailed
             if (!DB::getSchemaBuilder()->hasTable('measurement_results')) {
                 DB::statement("CREATE TABLE IF NOT EXISTS measurement_results (
                     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                    piece_session_id CHAR(36),
                     purchase_order_article_id BIGINT UNSIGNED NOT NULL,
                     measurement_id BIGINT UNSIGNED NOT NULL,
                     size VARCHAR(50) NOT NULL,
@@ -59,18 +72,20 @@ class UpsertMeasurementResultsDetailed
                     operator_id BIGINT UNSIGNED NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                    UNIQUE KEY mr_unique (purchase_order_article_id, measurement_id, size),
+                    UNIQUE KEY mr_piece_unique (piece_session_id, purchase_order_article_id, measurement_id, size),
                     FOREIGN KEY (purchase_order_article_id) REFERENCES purchase_order_articles(id) ON DELETE CASCADE,
                     FOREIGN KEY (measurement_id) REFERENCES measurements(id),
                     FOREIGN KEY (operator_id) REFERENCES operators(id) ON DELETE SET NULL
                 )");
             }
 
+            $hasPieceSessionId = DB::getSchemaBuilder()->hasColumn('measurement_results', 'piece_session_id');
             $hasArticleStyle = DB::getSchemaBuilder()->hasColumn('measurement_results', 'article_style');
 
             // --- AUTO-AGGREGATION FOR OVERALL DASHBOARD ---
-            // Group all side measurements for this article/size by measurement_id
+            // Group all sides for THIS piece from detailed results
             $allDetailed = DB::table('measurement_results_detailed')
+                ->where('piece_session_id', $pieceSessionId)
                 ->where('purchase_order_article_id', $poArticleId)
                 ->where('size', $size)
                 ->get();
@@ -79,6 +94,7 @@ class UpsertMeasurementResultsDetailed
             foreach ($allDetailed as $row) {
                 if (!isset($grouped[$row->measurement_id])) {
                     $grouped[$row->measurement_id] = [
+                        'piece_session_id' => $pieceSessionId,
                         'purchase_order_article_id' => $poArticleId,
                         'measurement_id' => $row->measurement_id,
                         'size' => $size,
@@ -115,14 +131,19 @@ class UpsertMeasurementResultsDetailed
             }
 
             if (!empty($overallRows)) {
-                // Make sure the measurement_results table exists first, if not this should just work
-                // assuming the CREATE TABLE has run (which it has).
+                $upsertKey = $hasPieceSessionId 
+                    ? ['piece_session_id', 'purchase_order_article_id', 'measurement_id', 'size']
+                    : ['purchase_order_article_id', 'measurement_id', 'size'];
+                
+                $updateColumns = ['status', 'operator_id'];
+                if ($hasArticleStyle) {
+                    $updateColumns[] = 'article_style';
+                }
+
                 DB::table('measurement_results')->upsert(
                     $overallRows,
-                    ['purchase_order_article_id', 'measurement_id', 'size'],
-                    $hasArticleStyle
-                        ? ['status', 'operator_id', 'article_style']
-                        : ['status', 'operator_id']
+                    $upsertKey,
+                    $updateColumns
                 );
             }
             // --- END AUTO-AGGREGATION ---

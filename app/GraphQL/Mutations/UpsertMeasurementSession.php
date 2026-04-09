@@ -9,8 +9,18 @@ class UpsertMeasurementSession
     public function __invoke($_, array $args): array
     {
         try {
+            // piece_session_id is REQUIRED - it's the unique identifier for this physical piece
+            $pieceSessionId = $args['piece_session_id'] ?? null;
+            if (!$pieceSessionId) {
+                return [
+                    'success' => false,
+                    'message' => 'piece_session_id is required to track individual pieces',
+                ];
+            }
+
             DB::table('measurement_sessions')->upsert(
                 [[
+                    'piece_session_id' => $pieceSessionId,
                     'purchase_order_article_id' => $args['purchase_order_article_id'],
                     'size' => $args['size'],
                     'article_style' => $args['article_style'] ?? null,
@@ -24,10 +34,10 @@ class UpsertMeasurementSession
                     'back_qc_result' => $args['back_qc_result'] ?? null,
                     'updated_at' => now(),
                 ]],
-                ['purchase_order_article_id', 'size'],
+                ['piece_session_id'],
                 [
-                    'article_style', 'article_id', 'purchase_order_id', 'operator_id',
-                    'status', 'front_side_complete', 'back_side_complete',
+                    'purchase_order_article_id', 'size', 'article_style', 'article_id', 'purchase_order_id',
+                    'operator_id', 'status', 'front_side_complete', 'back_side_complete',
                     'front_qc_result', 'back_qc_result', 'updated_at',
                 ]
             );

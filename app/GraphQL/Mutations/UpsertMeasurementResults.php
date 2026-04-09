@@ -11,10 +11,11 @@ class UpsertMeasurementResults
         $results = $args['results'];
 
         try {
-            // Ensure table exists
+            // Ensure table exists with piece_session_id support
             if (!DB::getSchemaBuilder()->hasTable('measurement_results')) {
                 DB::statement("CREATE TABLE IF NOT EXISTS measurement_results (
                     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                    piece_session_id CHAR(36),
                     purchase_order_article_id BIGINT UNSIGNED NOT NULL,
                     measurement_id BIGINT UNSIGNED NOT NULL,
                     size VARCHAR(50) NOT NULL,
@@ -27,16 +28,17 @@ class UpsertMeasurementResults
                     operator_id BIGINT UNSIGNED NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                    UNIQUE KEY mr_unique (purchase_order_article_id, measurement_id, size),
+                    UNIQUE KEY mr_piece_unique (piece_session_id, purchase_order_article_id, measurement_id, size),
                     FOREIGN KEY (purchase_order_article_id) REFERENCES purchase_order_articles(id) ON DELETE CASCADE,
                     FOREIGN KEY (measurement_id) REFERENCES measurements(id),
                     FOREIGN KEY (operator_id) REFERENCES operators(id) ON DELETE SET NULL
                 )");
             }
 
+            $hasPieceSessionId = DB::getSchemaBuilder()->hasColumn('measurement_results', 'piece_session_id');
             $hasArticleStyle = DB::getSchemaBuilder()->hasColumn('measurement_results', 'article_style');
 
-            $rows = array_map(function ($r) use ($hasArticleStyle) {
+            $rows = array_map(function ($r) use ($hasPieceSessionId, $hasArticleStyle) {
                 $row = [
                     'purchase_order_article_id' => $r['purchase_order_article_id'],
                     'measurement_id' => $r['measurement_id'],
@@ -49,6 +51,10 @@ class UpsertMeasurementResults
                     'operator_id' => $r['operator_id'] ?? null,
                 ];
 
+                if ($hasPieceSessionId) {
+                    $row['piece_session_id'] = $r['piece_session_id'] ?? null;
+                }
+
                 if ($hasArticleStyle) {
                     $row['article_style'] = $r['article_style'] ?? null;
                 }
@@ -56,14 +62,17 @@ class UpsertMeasurementResults
                 return $row;
             }, $results);
 
-            $updateColumns = ['measured_value', 'expected_value', 'tol_plus', 'tol_minus', 'status', 'operator_id'];
+            $updateColumns = ['measured_value', 'expected_value', 'tol_plus', 'tol_minus', 'status', 'operator_id', 'updated_at'];
             if ($hasArticleStyle) {
                 $updateColumns[] = 'article_style';
             }
 
+            // Use piece_session_id as primary key if available, otherwise fall back to old key for backward compat
+            $upsertKey = $hasPieceSessionId ? ['piece_session_id', 'purchase_order_article_id', 'measurement_id', 'size'] : ['purchase_order_article_id', 'measurement_id', 'size'];
+
             DB::table('measurement_results')->upsert(
                 $rows,
-                ['purchase_order_article_id', 'measurement_id', 'size'],
+                $upsertKey,
                 $updateColumns
             );
 
