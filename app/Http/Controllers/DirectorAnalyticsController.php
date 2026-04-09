@@ -16,7 +16,9 @@ use Throwable;
 class DirectorAnalyticsController extends Controller
 {
     /**
-     * Latest-row projection for measurement_sessions by logical piece key.
+     * Latest-row projection for measurement_sessions by unique piece_session_id.
+     * CRITICAL: Scoped by piece_session_id (not by purchase_order_article_id + size)
+     * so that multiple pieces with the same article/size are NOT collapsed into 1 row.
      */
     private function latestMeasurementSessionsSubquery(): string
     {
@@ -26,8 +28,7 @@ class DirectorAnalyticsController extends Controller
             WHERE NOT EXISTS (
                 SELECT 1
                 FROM measurement_sessions ms2
-                WHERE ms2.purchase_order_article_id = ms1.purchase_order_article_id
-                  AND ms2.size = ms1.size
+                WHERE ms2.piece_session_id = ms1.piece_session_id
                   AND (
                         ms2.updated_at > ms1.updated_at
                         OR (ms2.updated_at = ms1.updated_at AND ms2.id > ms1.id)
@@ -37,7 +38,9 @@ class DirectorAnalyticsController extends Controller
     }
 
     /**
-     * Latest-row projection for measurement_results by logical measurement key.
+     * Latest-row projection for measurement_results by unique piece_session_id + measurement_id.
+     * CRITICAL: Scoped by piece_session_id (not by purchase_order_article_id + size)
+     * This preserves each piece's measurements as distinct rows.
      */
     private function latestMeasurementResultsSubquery(): string
     {
@@ -47,8 +50,7 @@ class DirectorAnalyticsController extends Controller
             WHERE NOT EXISTS (
                 SELECT 1
                 FROM measurement_results mr2
-                WHERE mr2.purchase_order_article_id = mr1.purchase_order_article_id
-                  AND mr2.size = mr1.size
+                WHERE mr2.piece_session_id = mr1.piece_session_id
                   AND mr2.measurement_id = mr1.measurement_id
                   AND (
                         mr2.updated_at > mr1.updated_at
@@ -59,7 +61,9 @@ class DirectorAnalyticsController extends Controller
     }
 
     /**
-     * Latest-row projection for measurement_results_detailed by logical side key.
+     * Latest-row projection for measurement_results_detailed by unique piece_session_id + side + measurement_id.
+     * CRITICAL: Scoped by piece_session_id (not by purchase_order_article_id + size)
+     * This preserves each piece's per-side measurements as distinct rows.
      */
     private function latestMeasurementResultsDetailedSubquery(): string
     {
@@ -69,8 +73,7 @@ class DirectorAnalyticsController extends Controller
             WHERE NOT EXISTS (
                 SELECT 1
                 FROM measurement_results_detailed mrd2
-                WHERE mrd2.purchase_order_article_id = mrd1.purchase_order_article_id
-                  AND mrd2.size = mrd1.size
+                WHERE mrd2.piece_session_id = mrd1.piece_session_id
                   AND mrd2.side = mrd1.side
                   AND mrd2.measurement_id = mrd1.measurement_id
                   AND (
