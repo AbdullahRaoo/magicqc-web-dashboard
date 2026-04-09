@@ -33,8 +33,6 @@ import {
     ChevronUp,
     Download,
     Search,
-    AlertTriangle,
-    Crosshair,
 } from 'lucide-react';
 
 // Types for the analytics data
@@ -414,14 +412,12 @@ export default function DirectorAnalyticsDashboard({
                     <CardHeader className="pb-3">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-100 dark:bg-sky-900/30">
-                                    <Filter className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+                                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
+                                    <ClipboardList className="h-4 w-4 text-slate-600 dark:text-slate-300" />
                                 </div>
                                 <div>
-                                    <CardTitle className="text-lg">Filters</CardTitle>
-                                    {hasActiveFilters && (
-                                        <p className="text-sm font-medium" style={{color: '#6C88C4'}}>Filters active</p>
-                                    )}
+                                    <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Piece QC Overview</h2>
+                                    <p className="text-sm text-slate-500 dark:text-slate-400">Piece-level pass, fail, and completion metrics</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -439,7 +435,7 @@ export default function DirectorAnalyticsDashboard({
                                         variant="outline"
                                         size="sm"
                                         onClick={resetFilters}
-                                        className="text-xs"
+                                        className="text-xs border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-400 dark:hover:bg-amber-900/20"
                                     >
                                         <RefreshCw className="mr-1 h-3 w-3" />
                                         Reset
@@ -591,38 +587,38 @@ export default function DirectorAnalyticsDashboard({
                     )}
                 </Card>
 
-                {/* Parameter Quality KPI Cards */}
+                {/* Piece QC KPI Cards */}
                 <div className="flex items-center gap-2">
                     <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
                         <ClipboardList className="h-4 w-4 text-slate-600 dark:text-slate-300" />
                     </div>
                     <div>
-                        <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Parameter Quality Overview</h2>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">Per-measurement-point quality checks across all pieces</p>
+                        <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Piece QC Overview</h2>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">Piece-level pass, fail, and completion metrics</p>
                     </div>
                 </div>
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    {/* Total Parameter Checks */}
+                    {/* Total Pieces */}
                     <Card className="group relative overflow-hidden border shadow-md border-slate-200 dark:border-slate-700 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg">
                         <div className="absolute inset-0 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900" />
                         <CardHeader className="relative z-10 flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">Total Parameter Checks</CardTitle>
+                            <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">Total Pieces</CardTitle>
                             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white dark:bg-slate-700 shadow-sm">
                                 <ClipboardList className="h-5 w-5 text-slate-600 dark:text-slate-400" />
                             </div>
                         </CardHeader>
                         <CardContent className="relative z-10">
                             <div className="text-4xl font-bold text-slate-800 dark:text-white">{summary.total.toLocaleString()}</div>
-                            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Measurement points analyzed</p>
+                            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Pieces analyzed</p>
                         </CardContent>
                         <div className="absolute -bottom-8 -right-8 h-24 w-24 rounded-full bg-slate-200/50 dark:bg-slate-600/20 blur-xl" />
                     </Card>
 
-                    {/* Pass Checks */}
+                    {/* Pass Pieces */}
                     <Card className="group relative overflow-hidden border shadow-md border-emerald-100 dark:border-emerald-900 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg">
                         <div className="absolute inset-0 bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-950 dark:to-emerald-900" />
                         <CardHeader className="relative z-10 flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-base font-medium text-emerald-800 dark:text-emerald-300">Pass Checks</CardTitle>
+                            <CardTitle className="text-base font-medium text-emerald-800 dark:text-emerald-300">Pass Pieces</CardTitle>
                             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white dark:bg-emerald-800 shadow-sm">
                                 <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                             </div>
@@ -637,11 +633,11 @@ export default function DirectorAnalyticsDashboard({
                         <div className="absolute -bottom-8 -right-8 h-24 w-24 rounded-full bg-emerald-200/40 dark:bg-emerald-700/20 blur-xl" />
                     </Card>
 
-                    {/* Fail Checks */}
+                    {/* Fail Pieces */}
                     <Card className="group relative overflow-hidden border shadow-md border-rose-100 dark:border-rose-900 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg">
                         <div className="absolute inset-0 bg-gradient-to-br from-rose-50 to-rose-100 dark:from-rose-950 dark:to-rose-900" />
                         <CardHeader className="relative z-10 flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-base font-medium text-rose-800 dark:text-rose-300">Fail Checks</CardTitle>
+                            <CardTitle className="text-base font-medium text-rose-800 dark:text-rose-300">Fail Pieces</CardTitle>
                             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white dark:bg-rose-800 shadow-sm">
                                 <XCircle className="h-5 w-5 text-rose-600 dark:text-rose-400" />
                             </div>
@@ -917,7 +913,7 @@ export default function DirectorAnalyticsDashboard({
                                                 value="measurement"
                                                 className="cursor-pointer rounded-md data-[state=checked]:bg-[#AFDDD5]/30 data-[state=checked]:text-[#6C88C4] data-[state=checked]:font-semibold hover:!bg-slate-100 dark:hover:!bg-slate-700 focus:!bg-slate-100 dark:focus:!bg-slate-700 data-[state=checked]:hover:!bg-[#AFDDD5]/40 data-[state=checked]:focus:!bg-[#AFDDD5]/40"
                                             >
-                                                Measurement Report
+                                                Piece QC Report
                                             </SelectItem>
                                             <SelectItem
                                                 value="article"
@@ -1137,153 +1133,6 @@ export default function DirectorAnalyticsDashboard({
                     </Card>
                 </div>
 
-                {/* Measurement Failure Analysis Section */}
-                {failureAnalysis.totalViolations > 0 && (
-                    <>
-                        {/* Section Header */}
-                        <div className="relative overflow-hidden rounded-2xl p-8 shadow-md" style={{background: `linear-gradient(to bottom right, #8A9BA7, #6C88C4)`}}>
-                            <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-white/10 blur-3xl" />
-                            <div className="absolute -bottom-10 -left-10 h-24 w-24 rounded-full bg-slate-300/20 blur-xl" />
-                            <div className="relative z-10 flex items-center gap-3">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
-                                    <AlertTriangle className="h-5 w-5 text-white" />
-                                </div>
-                                <div>
-                                    <h2 className="text-2xl font-bold text-white">Non-Compliance Analysis</h2>
-                                    <p className="text-base text-white/80">
-                                        {failureAnalysis.totalViolations} Size Variation Detected across {failureAnalysis.parameterFailures.filter(p => p.times_failed > 0).length} measurement parameters
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Parameter Failure Ranking */}
-                        <Card className="border-border/50 shadow-sm">
-                            <CardHeader className="pb-3">
-                                <div className="flex items-center gap-2">
-                                    <div className="flex h-9 w-9 items-center justify-center rounded-lg" style={{backgroundColor: '#8A9BA7'}}>
-                                        <Crosshair className="h-5 w-5 text-white" />
-                                    </div>
-                                    <div>
-                                        <CardTitle className="text-lg">Most Failing Measurement Parameters</CardTitle>
-                                        <CardDescription className="text-sm">Which measurements fail most frequently</CardDescription>
-                                    </div>
-                                </div>
-                            </CardHeader>
-                            <CardContent className="pt-0">
-                                <div className="space-y-3">
-                                    {failureAnalysis.parameterFailures
-                                        .filter(p => p.times_failed > 0)
-                                        .map((param, idx) => {
-                                            const maxFailed = Math.max(...failureAnalysis.parameterFailures.map(p => p.times_failed), 1);
-                                            const barWidth = (param.times_failed / maxFailed) * 100;
-                                            return (
-                                                <div
-                                                    key={param.parameter}
-                                                    className="rounded-lg border border-slate-100 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-800/30 p-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
-                                                >
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold ${
-                                                                param.failure_rate >= 30 
-                                                                    ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400' 
-                                                                    : param.failure_rate >= 15 
-                                                                    ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
-                                                                    : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-                                                            }`}>
-                                                                {idx + 1}
-                                                            </span>
-                                                            <span className="font-semibold text-sm text-slate-800 dark:text-slate-200">
-                                                                {param.label}
-                                                            </span>
-                                                        </div>
-                                                        <div className="flex items-center gap-3 text-xs">
-                                                            <span className="text-slate-500">
-                                                                {param.times_failed}/{param.times_checked} checks failed
-                                                            </span>
-                                                            <span className={`font-bold ${param.failure_rate >= 30 ? 'text-rose-600 dark:text-rose-400' : param.failure_rate >= 15 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-600 dark:text-slate-400'}`}>
-                                                                {param.failure_rate}%
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="relative h-2 flex-1 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                                                            <div
-                                                                className={`absolute left-0 top-0 h-full rounded-full transition-all duration-700 ${
-                                                                    param.failure_rate >= 30
-                                                                        ? 'bg-gradient-to-r from-rose-400 to-rose-500'
-                                                                        : param.failure_rate >= 15
-                                                                        ? 'bg-gradient-to-r from-amber-400 to-amber-500'
-                                                                        : 'bg-gradient-to-r from-slate-400 to-slate-500'
-                                                                }`}
-                                                                style={{ width: `${barWidth}%` }}
-                                                            />
-                                                        </div>
-                                                        <span className="text-[10px] text-slate-500 whitespace-nowrap">
-                                                            Avg dev: ±{param.avg_deviation}cm
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })
-                                    }
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        {/* Articles with Repeated Issues - Full Width */}
-                            <Card className="border-border/50 shadow-sm">
-                                <CardHeader className="pb-3">
-                                    <div className="flex items-center gap-2">
-                                        <div className="flex h-9 w-9 items-center justify-center rounded-lg" style={{backgroundColor: '#FFCD73'}}>
-                                            <Package className="h-5 w-5 text-white" />
-                                        </div>
-                                        <div>
-                                        <CardTitle className="text-lg">Articles with Repeated Issues</CardTitle>
-                                        <CardDescription className="text-sm">Top articles by measurement failures</CardDescription>
-                                        </div>
-                                    </div>
-                                </CardHeader>
-                                <CardContent className="pt-0">
-                                    <div className="max-h-[400px] overflow-y-auto pr-1 space-y-3">
-                                        {failureAnalysis.articleFailures.length === 0 ? (
-                                            <p className="text-center text-sm text-slate-400 py-8">No article failure data</p>
-                                        ) : (
-                                            failureAnalysis.articleFailures.map((article, idx) => (
-                                                <div
-                                                    key={`${article.article_style}-${idx}`}
-                                                    className="rounded-lg border border-slate-100 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-800/30 p-3"
-                                                >
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <span className="font-semibold text-sm text-slate-800 dark:text-slate-200">
-                                                            {article.article_style}
-                                                        </span>
-                                                        <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-[10px] font-medium text-amber-700 dark:text-amber-400">
-                                                            {article.total_measurement_failures} failures
-                                                        </span>
-                                                    </div>
-                                                    <div className="text-xs text-slate-500 mb-2">
-                                                        {article.unique_params_failing} parameters affected · Most common: <span className="font-medium text-slate-700 dark:text-slate-300">{article.most_common_failure}</span> ({article.most_common_failure_count}×)
-                                                    </div>
-                                                    <div className="flex flex-wrap gap-1">
-                                                        {article.failing_params.slice(0, 5).map((fp) => (
-                                                            <span
-                                                                key={fp.parameter}
-                                                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-[10px] text-slate-600 dark:text-slate-400"
-                                                            >
-                                                                {fp.parameter}
-                                                                <span className="font-bold text-amber-700 dark:text-amber-400">×{fp.count}</span>
-                                                            </span>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            ))
-                                        )}
-                                    </div>
-                                </CardContent>
-                            </Card>
-                    </>
-                )}
             </div>
         </AppLayout>
     );
