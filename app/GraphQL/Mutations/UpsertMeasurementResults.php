@@ -34,23 +34,37 @@ class UpsertMeasurementResults
                 )");
             }
 
+            $hasArticleStyle = DB::getSchemaBuilder()->hasColumn('measurement_results', 'article_style');
+
+            $rows = array_map(function ($r) use ($hasArticleStyle) {
+                $row = [
+                    'purchase_order_article_id' => $r['purchase_order_article_id'],
+                    'measurement_id' => $r['measurement_id'],
+                    'size' => $r['size'],
+                    'measured_value' => $r['measured_value'] ?? null,
+                    'expected_value' => $r['expected_value'] ?? null,
+                    'tol_plus' => $r['tol_plus'] ?? null,
+                    'tol_minus' => $r['tol_minus'] ?? null,
+                    'status' => $r['status'] ?? 'PENDING',
+                    'operator_id' => $r['operator_id'] ?? null,
+                ];
+
+                if ($hasArticleStyle) {
+                    $row['article_style'] = $r['article_style'] ?? null;
+                }
+
+                return $row;
+            }, $results);
+
+            $updateColumns = ['measured_value', 'expected_value', 'tol_plus', 'tol_minus', 'status', 'operator_id'];
+            if ($hasArticleStyle) {
+                $updateColumns[] = 'article_style';
+            }
+
             DB::table('measurement_results')->upsert(
-                array_map(function ($r) {
-                    return [
-                        'purchase_order_article_id' => $r['purchase_order_article_id'],
-                        'measurement_id' => $r['measurement_id'],
-                        'size' => $r['size'],
-                        'article_style' => $r['article_style'] ?? null,
-                        'measured_value' => $r['measured_value'] ?? null,
-                        'expected_value' => $r['expected_value'] ?? null,
-                        'tol_plus' => $r['tol_plus'] ?? null,
-                        'tol_minus' => $r['tol_minus'] ?? null,
-                        'status' => $r['status'] ?? 'PENDING',
-                        'operator_id' => $r['operator_id'] ?? null,
-                    ];
-                }, $results),
+                $rows,
                 ['purchase_order_article_id', 'measurement_id', 'size'],
-                ['measured_value', 'expected_value', 'tol_plus', 'tol_minus', 'status', 'operator_id', 'article_style']
+                $updateColumns
             );
 
             return [
