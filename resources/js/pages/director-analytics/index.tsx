@@ -558,7 +558,16 @@ export default function DirectorAnalyticsDashboard({
                     )}
                 </Card>
 
-                {/* Summary KPI Cards */}
+                {/* Parameter Quality KPI Cards */}
+                <div className="flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
+                        <ClipboardList className="h-4 w-4 text-slate-600 dark:text-slate-300" />
+                    </div>
+                    <div>
+                        <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Parameter Quality Overview</h2>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">Per-measurement-point quality checks across all pieces</p>
+                    </div>
+                </div>
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                     {/* Total Parameter Checks */}
                     <Card className="group relative overflow-hidden border shadow-md border-slate-200 dark:border-slate-700 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg">
@@ -576,11 +585,11 @@ export default function DirectorAnalyticsDashboard({
                         <div className="absolute -bottom-8 -right-8 h-24 w-24 rounded-full bg-slate-200/50 dark:bg-slate-600/20 blur-xl" />
                     </Card>
 
-                    {/* Total Pass */}
+                    {/* Pass Checks */}
                     <Card className="group relative overflow-hidden border shadow-md border-emerald-100 dark:border-emerald-900 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg">
                         <div className="absolute inset-0 bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-950 dark:to-emerald-900" />
                         <CardHeader className="relative z-10 flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-base font-medium text-emerald-800 dark:text-emerald-300">Total Pass</CardTitle>
+                            <CardTitle className="text-base font-medium text-emerald-800 dark:text-emerald-300">Pass Checks</CardTitle>
                             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white dark:bg-emerald-800 shadow-sm">
                                 <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                             </div>
@@ -595,11 +604,11 @@ export default function DirectorAnalyticsDashboard({
                         <div className="absolute -bottom-8 -right-8 h-24 w-24 rounded-full bg-emerald-200/40 dark:bg-emerald-700/20 blur-xl" />
                     </Card>
 
-                    {/* Total Fail */}
+                    {/* Fail Checks */}
                     <Card className="group relative overflow-hidden border shadow-md border-rose-100 dark:border-rose-900 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg">
                         <div className="absolute inset-0 bg-gradient-to-br from-rose-50 to-rose-100 dark:from-rose-950 dark:to-rose-900" />
                         <CardHeader className="relative z-10 flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-base font-medium text-rose-800 dark:text-rose-300">Total Fail</CardTitle>
+                            <CardTitle className="text-base font-medium text-rose-800 dark:text-rose-300">Fail Checks</CardTitle>
                             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white dark:bg-rose-800 shadow-sm">
                                 <XCircle className="h-5 w-5 text-rose-600 dark:text-rose-400" />
                             </div>
@@ -645,6 +654,37 @@ export default function DirectorAnalyticsDashboard({
                         </div>
                     </CardHeader>
                     <CardContent className="space-y-6">
+                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                            <Card className="border-indigo-200 dark:border-indigo-900 shadow-sm">
+                                <CardContent className="p-4">
+                                    <div className="text-sm text-indigo-700 dark:text-indigo-300">Started Pieces</div>
+                                    <div className="mt-1 text-3xl font-bold text-indigo-700 dark:text-indigo-300">{pieceOverview.total_pieces.toLocaleString()}</div>
+                                    <div className="text-xs text-indigo-600 dark:text-indigo-400 mt-1">All piece sessions opened</div>
+                                </CardContent>
+                            </Card>
+                            <Card className="border-sky-200 dark:border-sky-900 shadow-sm">
+                                <CardContent className="p-4">
+                                    <div className="text-sm text-sky-700 dark:text-sky-300">Front Complete</div>
+                                    <div className="mt-1 text-3xl font-bold text-sky-700 dark:text-sky-300">{pieceOverview.front_complete_pieces.toLocaleString()}</div>
+                                    <div className="text-xs text-sky-600 dark:text-sky-400 mt-1">{pieceOverview.front_completion_rate}% of started pieces</div>
+                                </CardContent>
+                            </Card>
+                            <Card className="border-indigo-200 dark:border-indigo-900 shadow-sm">
+                                <CardContent className="p-4">
+                                    <div className="text-sm text-indigo-700 dark:text-indigo-300">Back Complete</div>
+                                    <div className="mt-1 text-3xl font-bold text-indigo-700 dark:text-indigo-300">{pieceOverview.back_complete_pieces.toLocaleString()}</div>
+                                    <div className="text-xs text-indigo-600 dark:text-indigo-400 mt-1">{pieceOverview.back_completion_rate}% of started pieces</div>
+                                </CardContent>
+                            </Card>
+                            <Card className="border-emerald-200 dark:border-emerald-900 shadow-sm">
+                                <CardContent className="p-4">
+                                    <div className="text-sm text-emerald-700 dark:text-emerald-300">Completed Pieces</div>
+                                    <div className="mt-1 text-3xl font-bold text-emerald-700 dark:text-emerald-300">{pieceOverview.completed_pieces.toLocaleString()}</div>
+                                    <div className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">Ready for final outcome decision</div>
+                                </CardContent>
+                            </Card>
+                        </div>
+
                         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                             <Card className="border-slate-200 dark:border-slate-700 shadow-sm">
                                 <CardContent className="p-4">
