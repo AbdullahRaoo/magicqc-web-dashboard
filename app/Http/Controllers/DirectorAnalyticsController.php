@@ -539,38 +539,29 @@ class DirectorAnalyticsController extends Controller
 
     private function getArticleSummary(array $filters): array
     {
-        [$mrWhere, $mrBindings] = $this->buildMrWhere($filters);
-        $latestMr = $this->latestMeasurementResultsSubquery();
+        $base = $this->buildPieceQuery($filters);
 
-        $mrRows = DB::select("
-            SELECT
-                poa.article_style,
-                COALESCE(b.name, 'Unknown') as brand_name,
-                    poa.article_type_id,
-                    COALESCE(at.name, 'Unknown') as article_type_name,
-                    mr.size,
-                COUNT(*) as total,
-                SUM(CASE WHEN mr.status = 'PASS' THEN 1 ELSE 0 END) as pass,
-                SUM(CASE WHEN mr.status = 'FAIL' THEN 1 ELSE 0 END) as fail
-            FROM ({$latestMr}) mr
-            JOIN purchase_order_articles poa ON mr.purchase_order_article_id = poa.id
-            JOIN purchase_orders po ON poa.purchase_order_id = po.id
-            LEFT JOIN article_types at ON poa.article_type_id = at.id
-            LEFT JOIN brands b ON po.brand_id = b.id
-            {$mrWhere}
-                GROUP BY poa.article_style, b.name, poa.article_type_id, at.name, mr.size
-            ORDER BY total DESC
-        ", $mrBindings);
-
-        return array_map(function ($row) {
-            $row = (array) $row;
-            return [
-                ...$row,
-                'total' => (int) ($row['total'] ?? 0),
-                'pass' => (int) ($row['pass'] ?? 0),
-                'fail' => (int) ($row['fail'] ?? 0),
-            ];
-        }, $mrRows);
+        return (clone $base)
+            ->selectRaw("\n                ms.piece_session_id,\n                poa.article_style,\n                COALESCE(b.name, 'Unknown') as brand_name,\n                poa.article_type_id,\n                COALESCE(at.name, 'Unknown') as article_type_name,\n                ms.size,\n                total_measurements as total,\n                pass_measurements as pass,\n                fail_measurements as fail,\n                piece_result,\n                ms.status as piece_status,\n                ms.updated_at\n            ")
+            ->orderByDesc('ms.updated_at')
+            ->get()
+            ->map(function ($row) {
+                return [
+                    'piece_session_id' => $row->piece_session_id,
+                    'article_style' => $row->article_style,
+                    'brand_name' => $row->brand_name,
+                    'article_type_id' => (int) ($row->article_type_id ?? 0),
+                    'article_type_name' => $row->article_type_name,
+                    'size' => $row->size,
+                    'total' => (int) ($row->total ?? 0),
+                    'pass' => (int) ($row->pass ?? 0),
+                    'fail' => (int) ($row->fail ?? 0),
+                    'piece_result' => $row->piece_result,
+                    'piece_status' => $row->piece_status,
+                    'updated_at' => $row->updated_at,
+                ];
+            })
+            ->toArray();
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -579,34 +570,24 @@ class DirectorAnalyticsController extends Controller
 
     private function getOperatorPerformance(array $filters): array
     {
-        [$mrWhere, $mrBindings] = $this->buildMrWhere($filters);
-        $latestMr = $this->latestMeasurementResultsSubquery();
+        $base = $this->buildPieceQuery($filters);
 
-        $mrRows = DB::select("
-            SELECT
-                o.full_name as operator_name,
-                o.employee_id,
-                COUNT(*) as total,
-                SUM(CASE WHEN mr.status = 'PASS' THEN 1 ELSE 0 END) as pass,
-                SUM(CASE WHEN mr.status = 'FAIL' THEN 1 ELSE 0 END) as fail
-            FROM ({$latestMr}) mr
-            JOIN operators o ON mr.operator_id = o.id
-            JOIN purchase_order_articles poa ON mr.purchase_order_article_id = poa.id
-            JOIN purchase_orders po ON poa.purchase_order_id = po.id
-            {$mrWhere}
-            GROUP BY o.full_name, o.employee_id
-            ORDER BY total DESC
-        ", $mrBindings);
-
-        return array_map(function ($row) {
-            $row = (array) $row;
-            return [
-                ...$row,
-                'total' => (int) ($row['total'] ?? 0),
-                'pass' => (int) ($row['pass'] ?? 0),
-                'fail' => (int) ($row['fail'] ?? 0),
-            ];
-        }, $mrRows);
+        return (clone $base)
+            ->whereNotNull('ms.operator_id')
+            ->selectRaw("\n                o.full_name as operator_name,\n                o.employee_id,\n                COUNT(*) as total,\n                SUM(CASE WHEN piece_result = 'PASS' THEN 1 ELSE 0 END) as pass,\n                SUM(CASE WHEN piece_result = 'FAIL' THEN 1 ELSE 0 END) as fail\n            ")
+            ->groupBy('o.full_name', 'o.employee_id')
+            ->orderByDesc('total')
+            ->get()
+            ->map(function ($row) {
+                return [
+                    'operator_name' => $row->operator_name,
+                    'employee_id' => $row->employee_id,
+                    'total' => (int) ($row->total ?? 0),
+                    'pass' => (int) ($row->pass ?? 0),
+                    'fail' => (int) ($row->fail ?? 0),
+                ];
+            })
+            ->toArray();
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -651,210 +632,15 @@ class DirectorAnalyticsController extends Controller
 
     private function getMeasurementFailureAnalysis(array $filters): array
     {
-        if (!Schema::hasTable('measurement_results_detailed')) {
-            return [
-                'parameterFailures' => [],
-                'articleFailures' => [],
-                'toleranceConcentration' => [],
-                'totalViolations' => 0,
-            ];
-        }
-
-        $paramStats = [];
-        $articleMeasurementFailures = [];
-        $toleranceViolations = [];
-
-        // --- Source 1: measurement_results_detailed (Operator Panel, per-POM per-side) ---
-        $this->analyzeMrdRecords($filters, $paramStats, $articleMeasurementFailures, $toleranceViolations);
-
-        // --- Build output arrays ---
-
-        // 1. Parameter failure ranking
-        $parameterFailures = [];
-        foreach ($paramStats as $name => $stats) {
-            $parameterFailures[] = [
-                'parameter' => $name,
-                'label' => ucwords(str_replace('_', ' ', $name)),
-                'times_checked' => $stats['checked'],
-                'times_failed' => $stats['failed'],
-                'failure_rate' => $stats['checked'] > 0 ? round(($stats['failed'] / $stats['checked']) * 100, 1) : 0,
-                'avg_deviation' => $stats['failed'] > 0 ? round($stats['total_deviation'] / $stats['failed'], 2) : 0,
-            ];
-        }
-        usort($parameterFailures, fn($a, $b) => $b['times_failed'] <=> $a['times_failed']);
-
-        // 2. Articles with most repeated measurement issues (top 10)
-        $articleFailures = [];
-        foreach ($articleMeasurementFailures as $articleStyle => $params) {
-            $totalFails = array_sum($params);
-            $topFailParam = array_keys($params, max($params))[0] ?? '';
-            $articleFailures[] = [
-                'article_style' => $articleStyle,
-                'total_measurement_failures' => $totalFails,
-                'unique_params_failing' => count($params),
-                'most_common_failure' => ucwords(str_replace('_', ' ', $topFailParam)),
-                'most_common_failure_count' => $params[$topFailParam] ?? 0,
-                'failing_params' => collect($params)
-                    ->map(fn($count, $param) => [
-                        'parameter' => ucwords(str_replace('_', ' ', $param)),
-                        'count' => $count,
-                    ])
-                    ->sortByDesc('count')
-                    ->values()
-                    ->toArray(),
-            ];
-        }
-        usort($articleFailures, fn($a, $b) => $b['total_measurement_failures'] <=> $a['total_measurement_failures']);
-        $articleFailures = array_slice($articleFailures, 0, 10);
-
-        // 3. Tolerance concentration by parameter
-        $violationsByParam = [];
-        foreach ($toleranceViolations as $v) {
-            $name = $v['parameter'];
-            if (!isset($violationsByParam[$name])) {
-                $violationsByParam[$name] = [
-                    'count' => 0, 'total_abs_deviation' => 0,
-                    'max_abs_deviation' => 0, 'over_count' => 0, 'under_count' => 0,
-                ];
-            }
-            $vp = &$violationsByParam[$name];
-            $vp['count']++;
-            $absDev = abs($v['deviation']);
-            $vp['total_abs_deviation'] += $absDev;
-            if ($absDev > $vp['max_abs_deviation']) $vp['max_abs_deviation'] = $absDev;
-            if ($v['deviation'] > 0) $vp['over_count']++; else $vp['under_count']++;
-            unset($vp);
-        }
-
-        $toleranceConcentration = [];
-        foreach ($violationsByParam as $name => $stats) {
-            $toleranceConcentration[] = [
-                'parameter' => $name,
-                'label' => ucwords(str_replace('_', ' ', $name)),
-                'violation_count' => $stats['count'],
-                'avg_deviation' => $stats['count'] > 0 ? round($stats['total_abs_deviation'] / $stats['count'], 2) : 0,
-                'max_deviation' => round($stats['max_abs_deviation'], 2),
-                'over_tolerance_pct' => $stats['count'] > 0 ? round(($stats['over_count'] / $stats['count']) * 100, 0) : 0,
-                'under_tolerance_pct' => $stats['count'] > 0 ? round(($stats['under_count'] / $stats['count']) * 100, 0) : 0,
-            ];
-        }
-        usort($toleranceConcentration, fn($a, $b) => $b['violation_count'] <=> $a['violation_count']);
-
+        // This section was previously parameter-focused.
+        // The dashboard is now piece-first, so keep failure analysis empty until
+        // a dedicated piece-oriented failure model is defined.
         return [
-            'parameterFailures' => $parameterFailures,
-            'articleFailures' => $articleFailures,
-            'toleranceConcentration' => $toleranceConcentration,
-            'totalViolations' => count($toleranceViolations),
+            'parameterFailures' => [],
+            'articleFailures' => [],
+            'toleranceConcentration' => [],
+            'totalViolations' => 0,
         ];
-    }
-
-    /**
-     * Analyze measurement_results_detailed for failure data.
-     * This is the authoritative per-POM per-side source from the Operator Panel.
-     */
-    private function analyzeMrdRecords(array $filters, array &$paramStats, array &$articleMeasurementFailures, array &$toleranceViolations): void
-    {
-        $where = [];
-        $bindings = [];
-
-        if (!empty($filters['article_style'])) {
-            $where[] = 'mrd.article_style = ?';
-            $bindings[] = $filters['article_style'];
-        }
-        if (!empty($filters['article_type_id'])) {
-            $where[] = 'poa.article_type_id = ?';
-            $bindings[] = $filters['article_type_id'];
-        }
-        if (!empty($filters['size'])) {
-            $where[] = 'mrd.size = ?';
-            $bindings[] = $filters['size'];
-        }
-        if (!empty($filters['operator_id'])) {
-            $where[] = 'mrd.operator_id = ?';
-            $bindings[] = $filters['operator_id'];
-        }
-        if (!empty($filters['date_from'])) {
-            $where[] = 'DATE(mrd.created_at) >= ?';
-            $bindings[] = $filters['date_from'];
-        }
-        if (!empty($filters['date_to'])) {
-            $where[] = 'DATE(mrd.created_at) <= ?';
-            $bindings[] = $filters['date_to'];
-        }
-        if (!empty($filters['result'])) {
-            $where[] = 'mrd.status = ?';
-            $bindings[] = strtoupper($filters['result']);
-        }
-        if (!empty($filters['side'])) {
-            $where[] = 'mrd.side = ?';
-            $bindings[] = $filters['side'];
-        }
-        if (!empty($filters['brand_id'])) {
-            $where[] = 'po.brand_id = ?';
-            $bindings[] = $filters['brand_id'];
-        }
-
-        $whereClause = $where ? 'WHERE ' . implode(' AND ', $where) : '';
-        $latestMrd = $this->latestMeasurementResultsDetailedSubquery();
-
-        try {
-            $rows = DB::select("
-                SELECT
-                    m.measurement as param_name,
-                    m.code as param_code,
-                    mrd.article_style,
-                    mrd.measured_value,
-                    mrd.expected_value,
-                    mrd.tol_plus,
-                    mrd.tol_minus,
-                    mrd.status,
-                    mrd.side
-                FROM ({$latestMrd}) mrd
-                JOIN measurements m ON mrd.measurement_id = m.id
-                JOIN purchase_order_articles poa ON mrd.purchase_order_article_id = poa.id
-                JOIN purchase_orders po ON poa.purchase_order_id = po.id
-                {$whereClause}
-            ", $bindings);
-        } catch (Throwable $e) {
-            Log::warning('Measurement failure analysis query failed', ['error' => $e->getMessage()]);
-            return;
-        }
-
-        foreach ($rows as $row) {
-            $paramKey = strtolower(str_replace(' ', '_', $row->param_name));
-
-            if (!isset($paramStats[$paramKey])) {
-                $paramStats[$paramKey] = ['checked' => 0, 'failed' => 0, 'total_deviation' => 0];
-            }
-            $paramStats[$paramKey]['checked']++;
-
-            if ($row->status === 'FAIL') {
-                $deviation = $row->measured_value !== null && $row->expected_value !== null
-                    ? (float) $row->measured_value - (float) $row->expected_value
-                    : 0;
-
-                $paramStats[$paramKey]['failed']++;
-                $paramStats[$paramKey]['total_deviation'] += abs($deviation);
-
-                $articleStyle = $row->article_style;
-                if (!isset($articleMeasurementFailures[$articleStyle])) {
-                    $articleMeasurementFailures[$articleStyle] = [];
-                }
-                if (!isset($articleMeasurementFailures[$articleStyle][$paramKey])) {
-                    $articleMeasurementFailures[$articleStyle][$paramKey] = 0;
-                }
-                $articleMeasurementFailures[$articleStyle][$paramKey]++;
-
-                $toleranceViolations[] = [
-                    'parameter' => $paramKey,
-                    'article_style' => $articleStyle,
-                    'expected' => (float) ($row->expected_value ?? 0),
-                    'actual' => (float) ($row->measured_value ?? 0),
-                    'tolerance' => (float) ($row->tol_plus ?? 0),
-                    'deviation' => $deviation,
-                ];
-            }
-        }
     }
 
     // ──────────────────────────────────────────────────────────────
