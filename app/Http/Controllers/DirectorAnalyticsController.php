@@ -16,6 +16,72 @@ use Throwable;
 class DirectorAnalyticsController extends Controller
 {
     /**
+     * Latest-row projection for measurement_sessions by logical piece key.
+     */
+    private function latestMeasurementSessionsSubquery(): string
+    {
+        return "
+            SELECT ms1.*
+            FROM measurement_sessions ms1
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM measurement_sessions ms2
+                WHERE ms2.purchase_order_article_id = ms1.purchase_order_article_id
+                  AND ms2.size = ms1.size
+                  AND (
+                        ms2.updated_at > ms1.updated_at
+                        OR (ms2.updated_at = ms1.updated_at AND ms2.id > ms1.id)
+                  )
+            )
+        ";
+    }
+
+    /**
+     * Latest-row projection for measurement_results by logical measurement key.
+     */
+    private function latestMeasurementResultsSubquery(): string
+    {
+        return "
+            SELECT mr1.*
+            FROM measurement_results mr1
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM measurement_results mr2
+                WHERE mr2.purchase_order_article_id = mr1.purchase_order_article_id
+                  AND mr2.size = mr1.size
+                  AND mr2.measurement_id = mr1.measurement_id
+                  AND (
+                        mr2.updated_at > mr1.updated_at
+                        OR (mr2.updated_at = mr1.updated_at AND mr2.id > mr1.id)
+                  )
+            )
+        ";
+    }
+
+    /**
+     * Latest-row projection for measurement_results_detailed by logical side key.
+     */
+    private function latestMeasurementResultsDetailedSubquery(): string
+    {
+        return "
+            SELECT mrd1.*
+            FROM measurement_results_detailed mrd1
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM measurement_results_detailed mrd2
+                WHERE mrd2.purchase_order_article_id = mrd1.purchase_order_article_id
+                  AND mrd2.size = mrd1.size
+                  AND mrd2.side = mrd1.side
+                  AND mrd2.measurement_id = mrd1.measurement_id
+                  AND (
+                        mrd2.updated_at > mrd1.updated_at
+                        OR (mrd2.updated_at = mrd1.updated_at AND mrd2.id > mrd1.id)
+                  )
+            )
+        ";
+    }
+
+    /**
      * Display the director analytics dashboard.
      *
         * Queries authoritative Operator Panel QC sources:
@@ -218,7 +284,9 @@ class DirectorAnalyticsController extends Controller
      */
     private function buildPieceQuery(array $filters)
     {
-        $query = DB::table('measurement_sessions as ms')
+        $latestSessions = $this->latestMeasurementSessionsSubquery();
+
+        $query = DB::table(DB::raw("({$latestSessions}) as ms"))
             ->join('purchase_order_articles as poa', 'ms.purchase_order_article_id', '=', 'poa.id')
             ->join('purchase_orders as po', 'poa.purchase_order_id', '=', 'po.id')
             ->leftJoin('brands as b', 'po.brand_id', '=', 'b.id')
@@ -235,10 +303,10 @@ class DirectorAnalyticsController extends Controller
             $query->where('ms.operator_id', $filters['operator_id']);
         }
         if (!empty($filters['date_from'])) {
-            $query->whereDate('ms.created_at', '>=', $filters['date_from']);
+            $query->whereDate('ms.updated_at', '>=', $filters['date_from']);
         }
         if (!empty($filters['date_to'])) {
-            $query->whereDate('ms.created_at', '<=', $filters['date_to']);
+            $query->whereDate('ms.updated_at', '<=', $filters['date_to']);
         }
         if (!empty($filters['result'])) {
             $result = strtoupper($filters['result']);
@@ -385,11 +453,11 @@ class DirectorAnalyticsController extends Controller
             $bindings[] = $filters['operator_id'];
         }
         if (!empty($filters['date_from'])) {
-            $where[] = 'DATE(mr.created_at) >= ?';
+            $where[] = 'DATE(mr.updated_at) >= ?';
             $bindings[] = $filters['date_from'];
         }
         if (!empty($filters['date_to'])) {
-            $where[] = 'DATE(mr.created_at) <= ?';
+            $where[] = 'DATE(mr.updated_at) <= ?';
             $bindings[] = $filters['date_to'];
         }
         if (!empty($filters['result'])) {
@@ -416,13 +484,14 @@ class DirectorAnalyticsController extends Controller
     private function getSummaryStats(array $filters): array
     {
         [$mrWhere, $mrBindings] = $this->buildMrWhere($filters);
+        $latestMr = $this->latestMeasurementResultsSubquery();
 
         $mrStats = DB::selectOne("
             SELECT
                 COUNT(*) as total,
                 SUM(CASE WHEN mr.status = 'PASS' THEN 1 ELSE 0 END) as pass,
                 SUM(CASE WHEN mr.status = 'FAIL' THEN 1 ELSE 0 END) as fail
-            FROM measurement_results mr
+            FROM ({$latestMr}) mr
             JOIN purchase_order_articles poa ON mr.purchase_order_article_id = poa.id
             JOIN purchase_orders po ON poa.purchase_order_id = po.id
             {$mrWhere}
@@ -448,6 +517,7 @@ class DirectorAnalyticsController extends Controller
     private function getArticleSummary(array $filters): array
     {
         [$mrWhere, $mrBindings] = $this->buildMrWhere($filters);
+        $latestMr = $this->latestMeasurementResultsSubquery();
 
         $mrRows = DB::select("
             SELECT
@@ -456,7 +526,7 @@ class DirectorAnalyticsController extends Controller
                 COUNT(*) as total,
                 SUM(CASE WHEN mr.status = 'PASS' THEN 1 ELSE 0 END) as pass,
                 SUM(CASE WHEN mr.status = 'FAIL' THEN 1 ELSE 0 END) as fail
-            FROM measurement_results mr
+            FROM ({$latestMr}) mr
             JOIN purchase_order_articles poa ON mr.purchase_order_article_id = poa.id
             JOIN purchase_orders po ON poa.purchase_order_id = po.id
             LEFT JOIN brands b ON po.brand_id = b.id
@@ -483,6 +553,7 @@ class DirectorAnalyticsController extends Controller
     private function getOperatorPerformance(array $filters): array
     {
         [$mrWhere, $mrBindings] = $this->buildMrWhere($filters);
+        $latestMr = $this->latestMeasurementResultsSubquery();
 
         $mrRows = DB::select("
             SELECT
@@ -491,7 +562,7 @@ class DirectorAnalyticsController extends Controller
                 COUNT(*) as total,
                 SUM(CASE WHEN mr.status = 'PASS' THEN 1 ELSE 0 END) as pass,
                 SUM(CASE WHEN mr.status = 'FAIL' THEN 1 ELSE 0 END) as fail
-            FROM measurement_results mr
+            FROM ({$latestMr}) mr
             JOIN operators o ON mr.operator_id = o.id
             JOIN purchase_order_articles poa ON mr.purchase_order_article_id = poa.id
             JOIN purchase_orders po ON poa.purchase_order_id = po.id
@@ -678,6 +749,7 @@ class DirectorAnalyticsController extends Controller
         }
 
         $whereClause = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+        $latestMrd = $this->latestMeasurementResultsDetailedSubquery();
 
         try {
             $rows = DB::select("
@@ -691,7 +763,7 @@ class DirectorAnalyticsController extends Controller
                     mrd.tol_minus,
                     mrd.status,
                     mrd.side
-                FROM measurement_results_detailed mrd
+                FROM ({$latestMrd}) mrd
                 JOIN measurements m ON mrd.measurement_id = m.id
                 JOIN purchase_order_articles poa ON mrd.purchase_order_article_id = poa.id
                 JOIN purchase_orders po ON poa.purchase_order_id = po.id
