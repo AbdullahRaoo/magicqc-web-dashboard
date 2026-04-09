@@ -362,9 +362,10 @@ class DirectorAnalyticsController extends Controller
         $base = $this->buildPieceQuery($filters);
 
         try {
-            $summary = (clone $base)
-                ->selectRaw("\n                COUNT(*) as total_pieces,\n                SUM(CASE WHEN ms.status = 'completed' THEN 1 ELSE 0 END) as completed_pieces,\n                SUM(CASE WHEN ms.status = 'in_progress' THEN 1 ELSE 0 END) as in_progress_pieces,\n                SUM(CASE WHEN ms.front_side_complete = 1 THEN 1 ELSE 0 END) as front_complete_pieces,\n                SUM(CASE WHEN ms.back_side_complete = 1 THEN 1 ELSE 0 END) as back_complete_pieces,\n                SUM(CASE WHEN ms.front_qc_result = 'PASS' AND ms.back_qc_result = 'PASS' THEN 1 ELSE 0 END) as pass_pieces,\n                SUM(CASE WHEN ms.front_qc_result = 'FAIL' OR ms.back_qc_result = 'FAIL' THEN 1 ELSE 0 END) as fail_pieces\n            ")
-                ->first();
+                $summary = DB::query()
+                    ->fromSub(clone $base, 'pieces')
+                    ->selectRaw("\n                    COUNT(*) as total_pieces,\n                    SUM(CASE WHEN pieces.status = 'completed' THEN 1 ELSE 0 END) as completed_pieces,\n                    SUM(CASE WHEN pieces.status = 'in_progress' THEN 1 ELSE 0 END) as in_progress_pieces,\n                    SUM(CASE WHEN pieces.front_side_complete = 1 THEN 1 ELSE 0 END) as front_complete_pieces,\n                    SUM(CASE WHEN pieces.back_side_complete = 1 THEN 1 ELSE 0 END) as back_complete_pieces,\n                    SUM(CASE WHEN pieces.piece_result = 'PASS' THEN 1 ELSE 0 END) as pass_pieces,\n                    SUM(CASE WHEN pieces.piece_result = 'FAIL' THEN 1 ELSE 0 END) as fail_pieces\n                ")
+                    ->first();
         } catch (Throwable $e) {
             Log::warning('Piece analytics query failed', ['error' => $e->getMessage()]);
 
@@ -508,12 +509,9 @@ class DirectorAnalyticsController extends Controller
     {
         $base = $this->buildPieceQuery($filters);
 
-        $mrStats = (clone $base)
-            ->selectRaw("
-                COUNT(*) as total,
-                SUM(CASE WHEN piece_result = 'PASS' THEN 1 ELSE 0 END) as pass,
-                SUM(CASE WHEN piece_result = 'FAIL' THEN 1 ELSE 0 END) as fail
-            ")
+        $mrStats = DB::query()
+            ->fromSub(clone $base, 'pieces')
+            ->selectRaw("\n                COUNT(*) as total,\n                SUM(CASE WHEN pieces.piece_result = 'PASS' THEN 1 ELSE 0 END) as pass,\n                SUM(CASE WHEN pieces.piece_result = 'FAIL' THEN 1 ELSE 0 END) as fail\n            ")
             ->first();
 
         $total = (int) ($mrStats->total ?? 0);
