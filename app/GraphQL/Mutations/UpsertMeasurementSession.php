@@ -18,14 +18,36 @@ class UpsertMeasurementSession
                 ];
             }
 
+            $articleId = $args['article_id'] ?? null;
+            $purchaseOrderId = $args['purchase_order_id'] ?? null;
+            $articleStyle = $args['article_style'] ?? null;
+
+            // Auto-resolve article_id / purchase_order_id from the join table when not supplied.
+            // purchase_order_articles has no article_id column — it stores article_style directly,
+            // so we look up articles.id by article_style.
+            if (!$articleId || !$purchaseOrderId || !$articleStyle) {
+                $poa = DB::table('purchase_order_articles')
+                    ->where('id', $args['purchase_order_article_id'])
+                    ->first();
+
+                $purchaseOrderId = $purchaseOrderId ?? ($poa->purchase_order_id ?? null);
+                $articleStyle = $articleStyle ?? ($poa->article_style ?? null);
+
+                if (!$articleId && $articleStyle) {
+                    $articleId = DB::table('articles')
+                        ->where('article_style', $articleStyle)
+                        ->value('id');
+                }
+            }
+
             DB::table('measurement_sessions')->upsert(
                 [[
                     'piece_session_id' => $pieceSessionId,
                     'purchase_order_article_id' => $args['purchase_order_article_id'],
                     'size' => $args['size'],
-                    'article_style' => $args['article_style'] ?? null,
-                    'article_id' => $args['article_id'] ?? null,
-                    'purchase_order_id' => $args['purchase_order_id'] ?? null,
+                    'article_style' => $articleStyle,
+                    'article_id' => $articleId,
+                    'purchase_order_id' => $purchaseOrderId,
                     'operator_id' => $args['operator_id'] ?? null,
                     'status' => $args['status'] ?? 'in_progress',
                     'front_side_complete' => $args['front_side_complete'] ?? false,
