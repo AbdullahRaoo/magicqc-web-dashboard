@@ -23,6 +23,14 @@ return new class extends Migration
             return;
         }
 
+        // MySQL requires an index for FK columns; the legacy unique index may currently
+        // be satisfying that requirement. Ensure a replacement index exists first.
+        if (!$this->indexExists('measurement_sessions', 'ms_purchase_order_article_idx')) {
+            Schema::table('measurement_sessions', function (Blueprint $table) {
+                $table->index(['purchase_order_article_id'], 'ms_purchase_order_article_idx');
+            });
+        }
+
         if ($this->indexExists('measurement_sessions', 'ms_poa_size_unique')) {
             Schema::table('measurement_sessions', function (Blueprint $table) {
                 $table->dropUnique('ms_poa_size_unique');
@@ -57,6 +65,12 @@ return new class extends Migration
         if (!$this->indexExists('measurement_sessions', 'ms_poa_size_unique')) {
             Schema::table('measurement_sessions', function (Blueprint $table) {
                 $table->unique(['purchase_order_article_id', 'size'], 'ms_poa_size_unique');
+            });
+        }
+
+        if ($this->indexExists('measurement_sessions', 'ms_purchase_order_article_idx')) {
+            Schema::table('measurement_sessions', function (Blueprint $table) {
+                $table->dropIndex('ms_purchase_order_article_idx');
             });
         }
     }
