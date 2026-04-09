@@ -26,6 +26,22 @@ class UpsertMeasurementSession
                 ];
             }
 
+            $incomingStatus = $args['status'] ?? 'in_progress';
+            $existingSession = DB::table('measurement_sessions')
+                ->where('piece_session_id', $pieceSessionId)
+                ->first();
+
+            if (
+                $existingSession
+                && ($existingSession->status ?? null) === 'completed'
+                && $incomingStatus === 'in_progress'
+            ) {
+                return [
+                    'success' => false,
+                    'message' => 'piece_session_id reuse detected for a completed piece. Generate a new piece_session_id for each next piece.',
+                ];
+            }
+
             $articleId = $args['article_id'] ?? null;
             $purchaseOrderId = $args['purchase_order_id'] ?? null;
             $articleStyle = $args['article_style'] ?? null;

@@ -15,23 +15,14 @@ import {
 import { useState, useMemo, useCallback } from 'react';
 import {
     BarChart3,
-    TrendingUp,
-    TrendingDown,
-    CheckCircle2,
-    XCircle,
-    ClipboardList,
     Users,
     Package,
-    FileDown,
-    FileSpreadsheet,
     Filter,
     RefreshCw,
     Activity,
-    Target,
     ArrowRight,
     ChevronDown,
     ChevronUp,
-    Download,
     Search,
 } from 'lucide-react';
 
@@ -248,9 +239,7 @@ export default function DirectorAnalyticsDashboard({
 
     const [showFilters, setShowFilters] = useState(false);
     const [articleSearch, setArticleSearch] = useState('');
-    const [pieceSearch, setPieceSearch] = useState('');
     const [operatorSearch, setOperatorSearch] = useState('');
-    const [reportType, setReportType] = useState<'all' | 'measurement' | 'article' | 'operator'>('all');
 
     // Check if any filters are applied
     const hasActiveFilters = useMemo(() => {
@@ -321,18 +310,6 @@ export default function DirectorAnalyticsDashboard({
         );
     }, [articleSummary, articleSearch]);
 
-    const filteredPieceArticles = useMemo(() => {
-        if (!pieceSearch) return pieceAnalytics.byArticle;
-        const q = pieceSearch.toLowerCase();
-        return pieceAnalytics.byArticle.filter(
-            p =>
-                p.article_style.toLowerCase().includes(q) ||
-                p.brand_name.toLowerCase().includes(q) ||
-                (p.article_type_name || '').toLowerCase().includes(q) ||
-                (p.size || '').toLowerCase().includes(q)
-        );
-    }, [pieceAnalytics.byArticle, pieceSearch]);
-
     // Filter operator performance by search
     const filteredOperators = useMemo(() => {
         if (!operatorSearch) return operatorPerformance;
@@ -345,7 +322,6 @@ export default function DirectorAnalyticsDashboard({
     // Max values for progress bar scaling
     const maxArticleTotal = useMemo(() => Math.max(...articleSummary.map(a => a.total), 1), [articleSummary]);
     const maxOperatorTotal = useMemo(() => Math.max(...operatorPerformance.map(o => o.total), 1), [operatorPerformance]);
-    const maxPieceTotal = useMemo(() => Math.max(...pieceAnalytics.byArticle.map(p => p.total_pieces), 1), [pieceAnalytics.byArticle]);
     const pieceOverview = pieceAnalytics.overview;
 
     const completedArticleStyles = useMemo(() => {
@@ -356,30 +332,6 @@ export default function DirectorAnalyticsDashboard({
         );
         return styles.size;
     }, [pieceAnalytics.byArticle]);
-
-    const brandPieceStats = useMemo(() => {
-        const grouped = pieceAnalytics.byArticle.reduce<Record<string, { total: number; completed: number; pass: number; fail: number }>>((acc, row) => {
-            const brand = row.brand_name || 'Unknown';
-            if (!acc[brand]) {
-                acc[brand] = { total: 0, completed: 0, pass: 0, fail: 0 };
-            }
-            acc[brand].total += row.total_pieces;
-            acc[brand].completed += row.completed_pieces;
-            acc[brand].pass += row.pass_pieces;
-            acc[brand].fail += row.fail_pieces;
-            return acc;
-        }, {});
-
-        return Object.entries(grouped)
-            .map(([brand, stats]) => ({
-                brand,
-                ...stats,
-                passRate: stats.total > 0 ? Math.round((stats.pass / stats.total) * 1000) / 10 : 0,
-            }))
-            .sort((a, b) => b.total - a.total);
-    }, [pieceAnalytics.byArticle]);
-
-    const maxBrandTotal = useMemo(() => Math.max(...brandPieceStats.map((b) => b.total), 1), [brandPieceStats]);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -587,86 +539,6 @@ export default function DirectorAnalyticsDashboard({
                     )}
                 </Card>
 
-                {/* Piece QC KPI Cards */}
-                <div className="flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
-                        <ClipboardList className="h-4 w-4 text-slate-600 dark:text-slate-300" />
-                    </div>
-                    <div>
-                        <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Piece QC Overview</h2>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">Piece-level pass, fail, and completion metrics</p>
-                    </div>
-                </div>
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    {/* Total Pieces */}
-                    <Card className="group relative overflow-hidden border shadow-md border-slate-200 dark:border-slate-700 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg">
-                        <div className="absolute inset-0 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900" />
-                        <CardHeader className="relative z-10 flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">Total Pieces</CardTitle>
-                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white dark:bg-slate-700 shadow-sm">
-                                <ClipboardList className="h-5 w-5 text-slate-600 dark:text-slate-400" />
-                            </div>
-                        </CardHeader>
-                        <CardContent className="relative z-10">
-                            <div className="text-4xl font-bold text-slate-800 dark:text-white">{summary.total.toLocaleString()}</div>
-                            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Pieces analyzed</p>
-                        </CardContent>
-                        <div className="absolute -bottom-8 -right-8 h-24 w-24 rounded-full bg-slate-200/50 dark:bg-slate-600/20 blur-xl" />
-                    </Card>
-
-                    {/* Pass Pieces */}
-                    <Card className="group relative overflow-hidden border shadow-md border-emerald-100 dark:border-emerald-900 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg">
-                        <div className="absolute inset-0 bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-950 dark:to-emerald-900" />
-                        <CardHeader className="relative z-10 flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-base font-medium text-emerald-800 dark:text-emerald-300">Pass Pieces</CardTitle>
-                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white dark:bg-emerald-800 shadow-sm">
-                                <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                            </div>
-                        </CardHeader>
-                        <CardContent className="relative z-10">
-                            <div className="text-4xl font-bold text-emerald-700 dark:text-emerald-300">{summary.pass.toLocaleString()}</div>
-                            <div className="mt-1 flex items-center gap-1.5">
-                                <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                                <p className="text-sm text-emerald-600 dark:text-emerald-400">{summary.passRate}% pass rate</p>
-                            </div>
-                        </CardContent>
-                        <div className="absolute -bottom-8 -right-8 h-24 w-24 rounded-full bg-emerald-200/40 dark:bg-emerald-700/20 blur-xl" />
-                    </Card>
-
-                    {/* Fail Pieces */}
-                    <Card className="group relative overflow-hidden border shadow-md border-rose-100 dark:border-rose-900 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg">
-                        <div className="absolute inset-0 bg-gradient-to-br from-rose-50 to-rose-100 dark:from-rose-950 dark:to-rose-900" />
-                        <CardHeader className="relative z-10 flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-base font-medium text-rose-800 dark:text-rose-300">Fail Pieces</CardTitle>
-                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white dark:bg-rose-800 shadow-sm">
-                                <XCircle className="h-5 w-5 text-rose-600 dark:text-rose-400" />
-                            </div>
-                        </CardHeader>
-                        <CardContent className="relative z-10">
-                            <div className="text-4xl font-bold text-rose-700 dark:text-rose-300">{summary.fail.toLocaleString()}</div>
-                            <div className="mt-1 flex items-center gap-1.5">
-                                <TrendingDown className="h-4 w-4 text-rose-600 dark:text-rose-400" />
-                                <p className="text-sm text-rose-600 dark:text-rose-400">{summary.failRate}% fail rate</p>
-                            </div>
-                        </CardContent>
-                        <div className="absolute -bottom-8 -right-8 h-24 w-24 rounded-full bg-rose-200/40 dark:bg-rose-700/20 blur-xl" />
-                    </Card>
-
-                    {/* Pass Rate Gauge */}
-                    <Card className="group relative overflow-hidden border shadow-md border-sky-200 dark:border-sky-800 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg">
-                        <div className="absolute inset-0 bg-gradient-to-br from-sky-50 to-white dark:from-slate-800 dark:to-slate-900" />
-                        <CardHeader className="relative z-10 flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-base font-medium text-slate-700 dark:text-slate-300">Quality Score</CardTitle>
-                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white dark:bg-slate-700 shadow-sm">
-                                <Target className="h-5 w-5 text-sky-600 dark:text-sky-400" />
-                            </div>
-                        </CardHeader>
-                        <CardContent className="relative z-10 flex justify-center pt-2">
-                            <RadialGauge value={summary.passRate} size={100} strokeWidth={8} />
-                        </CardContent>
-                    </Card>
-                </div>
-
                 {/* Piece QC Overview */}
                 <Card className="border-border/50 shadow-sm">
                     <CardHeader className="pb-3">
@@ -677,43 +549,12 @@ export default function DirectorAnalyticsDashboard({
                                 </div>
                                 <div>
                                     <CardTitle className="text-lg">Piece QC Overview</CardTitle>
-                                    <CardDescription className="text-sm">Per-piece progress, pass/fail, and side completeness</CardDescription>
+                                    <CardDescription className="text-sm">Bulk QC counts by piece and article</CardDescription>
                                 </div>
                             </div>
                         </div>
                     </CardHeader>
                     <CardContent className="space-y-6">
-                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                            <Card className="border-indigo-200 dark:border-indigo-900 shadow-sm">
-                                <CardContent className="p-4">
-                                    <div className="text-sm text-indigo-700 dark:text-indigo-300">Started Pieces</div>
-                                    <div className="mt-1 text-3xl font-bold text-indigo-700 dark:text-indigo-300">{pieceOverview.total_pieces.toLocaleString()}</div>
-                                    <div className="text-xs text-indigo-600 dark:text-indigo-400 mt-1">All piece sessions opened</div>
-                                </CardContent>
-                            </Card>
-                            <Card className="border-sky-200 dark:border-sky-900 shadow-sm">
-                                <CardContent className="p-4">
-                                    <div className="text-sm text-sky-700 dark:text-sky-300">Front Complete</div>
-                                    <div className="mt-1 text-3xl font-bold text-sky-700 dark:text-sky-300">{pieceOverview.front_complete_pieces.toLocaleString()}</div>
-                                    <div className="text-xs text-sky-600 dark:text-sky-400 mt-1">{pieceOverview.front_completion_rate}% of started pieces</div>
-                                </CardContent>
-                            </Card>
-                            <Card className="border-indigo-200 dark:border-indigo-900 shadow-sm">
-                                <CardContent className="p-4">
-                                    <div className="text-sm text-indigo-700 dark:text-indigo-300">Back Complete</div>
-                                    <div className="mt-1 text-3xl font-bold text-indigo-700 dark:text-indigo-300">{pieceOverview.back_complete_pieces.toLocaleString()}</div>
-                                    <div className="text-xs text-indigo-600 dark:text-indigo-400 mt-1">{pieceOverview.back_completion_rate}% of started pieces</div>
-                                </CardContent>
-                            </Card>
-                            <Card className="border-emerald-200 dark:border-emerald-900 shadow-sm">
-                                <CardContent className="p-4">
-                                    <div className="text-sm text-emerald-700 dark:text-emerald-300">Completed Pieces</div>
-                                    <div className="mt-1 text-3xl font-bold text-emerald-700 dark:text-emerald-300">{pieceOverview.completed_pieces.toLocaleString()}</div>
-                                    <div className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">Ready for final outcome decision</div>
-                                </CardContent>
-                            </Card>
-                        </div>
-
                         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                             <Card className="border-emerald-200 dark:border-emerald-900 shadow-sm">
                                 <CardContent className="p-4">
@@ -743,217 +584,6 @@ export default function DirectorAnalyticsDashboard({
                                     <div className="text-xs text-rose-600 dark:text-rose-400 mt-1">Requires investigation / rework</div>
                                 </CardContent>
                             </Card>
-                        </div>
-
-                        <div className="grid gap-6 lg:grid-cols-2">
-                            <Card className="border-border/50 shadow-sm">
-                                <CardHeader className="pb-3">
-                                    <div className="flex items-center justify-between gap-2">
-                                        <div>
-                                            <CardTitle className="text-lg">Piece Completion by Article</CardTitle>
-                                            <CardDescription className="text-sm">Which styles have the most completed QC pieces</CardDescription>
-                                        </div>
-                                    </div>
-                                    <div className="relative mt-2">
-                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                                        <Input
-                                            type="text"
-                                            placeholder="Search piece stats..."
-                                            value={pieceSearch}
-                                            onChange={(e) => setPieceSearch(e.target.value)}
-                                            className="h-10 pl-9 text-sm"
-                                        />
-                                    </div>
-                                </CardHeader>
-                                <CardContent className="pt-0">
-                                    <div className="max-h-[420px] overflow-y-auto pr-1 space-y-3">
-                                        {filteredPieceArticles.length === 0 ? (
-                                            <p className="text-center text-sm text-slate-400 py-8">No piece QC data available</p>
-                                        ) : (
-                                            filteredPieceArticles.map((piece, idx) => {
-                                                return (
-                                                    <div
-                                                        key={`${piece.article_style}-${piece.brand_name}-${idx}`}
-                                                        className="rounded-lg border border-slate-100 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-800/30 p-3"
-                                                    >
-                                                        <div className="flex items-center justify-between mb-2">
-                                                            <div className="min-w-0">
-                                                                <div className="font-semibold text-sm text-slate-800 dark:text-slate-200 truncate">{piece.article_style}</div>
-                                                                <div className="text-[11px] text-slate-500">
-                                                                    {piece.brand_name}
-                                                                    {piece.article_type_name ? ` • ${piece.article_type_name}` : ''}
-                                                                    {piece.size ? ` • ${piece.size}` : ''}
-                                                                </div>
-                                                            </div>
-                                                            <div className="text-right text-xs text-slate-500">
-                                                                <div>{piece.total_pieces} pieces</div>
-                                                                <div>{piece.completed_pieces} completed</div>
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="grid grid-cols-4 gap-2 mb-2 text-center">
-                                                            <div className="rounded-md bg-white dark:bg-slate-800 p-1.5 border border-slate-100 dark:border-slate-700">
-                                                                <div className="text-xs font-bold text-slate-800 dark:text-slate-200">{piece.pass_pieces}</div>
-                                                                <div className="text-[9px] text-slate-500 uppercase tracking-wider">Pass</div>
-                                                            </div>
-                                                            <div className="rounded-md bg-white dark:bg-slate-800 p-1.5 border border-slate-100 dark:border-slate-700">
-                                                                <div className="text-xs font-bold text-slate-800 dark:text-slate-200">{piece.fail_pieces}</div>
-                                                                <div className="text-[9px] text-slate-500 uppercase tracking-wider">Fail</div>
-                                                            </div>
-                                                            <div className="rounded-md bg-white dark:bg-slate-800 p-1.5 border border-slate-100 dark:border-slate-700">
-                                                                <div className="text-xs font-bold text-slate-800 dark:text-slate-200">{piece.in_progress_pieces}</div>
-                                                                <div className="text-[9px] text-slate-500 uppercase tracking-wider">In Progress</div>
-                                                            </div>
-                                                            <div className="rounded-md bg-white dark:bg-slate-800 p-1.5 border border-slate-100 dark:border-slate-700">
-                                                                <div className="text-xs font-bold text-slate-800 dark:text-slate-200">{piece.pending_pieces}</div>
-                                                                <div className="text-[9px] text-slate-500 uppercase tracking-wider">Pending</div>
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="space-y-2">
-                                                            <div>
-                                                                <div className="mb-1 flex items-center justify-between text-[11px] text-slate-500">
-                                                                    <span>Completion</span>
-                                                                    <span>{piece.completion_rate}%</span>
-                                                                </div>
-                                                                <ProgressBar value={piece.completed_pieces} max={maxPieceTotal} colorClass="bg-emerald-500" />
-                                                            </div>
-                                                            <div>
-                                                                <div className="mb-1 flex items-center justify-between text-[11px] text-slate-500">
-                                                                    <span>Pass rate</span>
-                                                                    <span>{piece.pass_rate}%</span>
-                                                                </div>
-                                                                <ProgressBar value={piece.pass_pieces} max={maxPieceTotal} colorClass="bg-sky-500" />
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })
-                                        )}
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            <Card className="border-border/50 shadow-sm">
-                                <CardHeader className="pb-3">
-                                    <CardTitle className="text-lg">Brand-wise Piece Performance</CardTitle>
-                                    <CardDescription className="text-sm">Bulk QC status by brand (pieces, pass/fail, completion)</CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
-                                    {brandPieceStats.length === 0 ? (
-                                        <p className="text-center text-sm text-slate-400 py-8">No brand-level piece data available</p>
-                                    ) : (
-                                        brandPieceStats.map((brand) => (
-                                            <div key={brand.brand} className="rounded-lg border border-slate-100 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-800/30 p-3">
-                                                <div className="flex items-center justify-between mb-2">
-                                                    <span className="font-semibold text-sm text-slate-800 dark:text-slate-200">{brand.brand}</span>
-                                                    <span className="text-xs text-slate-500">{brand.total} pieces</span>
-                                                </div>
-                                                <div className="grid grid-cols-3 gap-2 mb-2 text-center">
-                                                    <div className="rounded-md bg-white dark:bg-slate-800 p-1.5 border border-slate-100 dark:border-slate-700">
-                                                        <div className="text-xs font-bold text-emerald-700 dark:text-emerald-400">{brand.pass}</div>
-                                                        <div className="text-[9px] text-slate-500 uppercase tracking-wider">Pass</div>
-                                                    </div>
-                                                    <div className="rounded-md bg-white dark:bg-slate-800 p-1.5 border border-slate-100 dark:border-slate-700">
-                                                        <div className="text-xs font-bold text-rose-700 dark:text-rose-400">{brand.fail}</div>
-                                                        <div className="text-[9px] text-slate-500 uppercase tracking-wider">Fail</div>
-                                                    </div>
-                                                    <div className="rounded-md bg-white dark:bg-slate-800 p-1.5 border border-slate-100 dark:border-slate-700">
-                                                        <div className="text-xs font-bold text-slate-800 dark:text-slate-200">{brand.completed}</div>
-                                                        <div className="text-[9px] text-slate-500 uppercase tracking-wider">Done</div>
-                                                    </div>
-                                                </div>
-                                                <div className="mb-1 flex items-center justify-between text-[11px] text-slate-500">
-                                                    <span>Piece volume</span>
-                                                    <span>{brand.passRate}% pass</span>
-                                                </div>
-                                                <ProgressBar value={brand.total} max={maxBrandTotal} colorClass="bg-indigo-500" />
-                                            </div>
-                                        ))
-                                    )}
-                                </CardContent>
-                            </Card>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Export Buttons with Report Type Filter */}
-                <Card className="border-border/50 shadow-sm">
-                    <CardHeader className="pb-3">
-                        <div className="flex items-center gap-2">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{backgroundColor: '#AFDDD5'}}>
-                                <Download className="h-5 w-5 text-white" />
-                            </div>
-                            <CardTitle className="text-lg">Export Reports</CardTitle>
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-4">
-                            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="report-type" className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                        Report Type
-                                    </Label>
-                                    <Select value={reportType} onValueChange={(value) => setReportType(value as any)}>
-                                        <SelectTrigger
-                                            id="report-type"
-                                            className="h-11 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 shadow-sm hover:border-[#6C88C4] dark:hover:border-[#6C88C4] transition-all font-medium text-slate-700 dark:text-slate-200"
-                                            style={{borderColor: '#6C88C4'}}
-                                        >
-                                            <SelectValue placeholder="Select report type" />
-                                        </SelectTrigger>
-                                        <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-xl rounded-lg">
-                                            <SelectItem
-                                                value="all"
-                                                className="cursor-pointer rounded-md data-[state=checked]:bg-[#AFDDD5]/30 data-[state=checked]:text-[#6C88C4] data-[state=checked]:font-semibold hover:!bg-slate-100 dark:hover:!bg-slate-700 focus:!bg-slate-100 dark:focus:!bg-slate-700 data-[state=checked]:hover:!bg-[#AFDDD5]/40 data-[state=checked]:focus:!bg-[#AFDDD5]/40"
-                                            >
-                                                Complete Report
-                                            </SelectItem>
-                                            <SelectItem
-                                                value="measurement"
-                                                className="cursor-pointer rounded-md data-[state=checked]:bg-[#AFDDD5]/30 data-[state=checked]:text-[#6C88C4] data-[state=checked]:font-semibold hover:!bg-slate-100 dark:hover:!bg-slate-700 focus:!bg-slate-100 dark:focus:!bg-slate-700 data-[state=checked]:hover:!bg-[#AFDDD5]/40 data-[state=checked]:focus:!bg-[#AFDDD5]/40"
-                                            >
-                                                Piece QC Report
-                                            </SelectItem>
-                                            <SelectItem
-                                                value="article"
-                                                className="cursor-pointer rounded-md data-[state=checked]:bg-[#AFDDD5]/30 data-[state=checked]:text-[#6C88C4] data-[state=checked]:font-semibold hover:!bg-slate-100 dark:hover:!bg-slate-700 focus:!bg-slate-100 dark:focus:!bg-slate-700 data-[state=checked]:hover:!bg-[#AFDDD5]/40 data-[state=checked]:focus:!bg-[#AFDDD5]/40"
-                                            >
-                                                Article-wise Report
-                                            </SelectItem>
-                                            <SelectItem
-                                                value="operator"
-                                                className="cursor-pointer rounded-md data-[state=checked]:bg-[#AFDDD5]/30 data-[state=checked]:text-[#6C88C4] data-[state=checked]:font-semibold hover:!bg-slate-100 dark:hover:!bg-slate-700 focus:!bg-slate-100 dark:focus:!bg-slate-700 data-[state=checked]:hover:!bg-[#AFDDD5]/40 data-[state=checked]:focus:!bg-[#AFDDD5]/40"
-                                            >
-                                                Operators' Usage Report
-                                            </SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-3">
-                                <Button
-                                    onClick={exportExcel}
-                                    className="bg-gradient-to-r text-white hover:opacity-90 shadow-md text-base px-6 py-5"
-                                    style={{background: `linear-gradient(to right, #AFDDD5, ${reportType === 'all' ? '#6C88C4' : '#8A9BA7'})`}}
-                                >
-                                    <FileSpreadsheet className="mr-2 h-5 w-5" />
-                                    Download Excel Report
-                                </Button>
-                                <Button
-                                    onClick={exportPdf}
-                                    className="bg-gradient-to-r text-white hover:opacity-90 shadow-md text-base px-6 py-5"
-                                    style={{background: `linear-gradient(to right, #6C88C4, #8A9BA7)`}}
-                                >
-                                    <FileDown className="mr-2 h-5 w-5" />
-                                    Download PDF Report
-                                </Button>
-                                {hasActiveFilters && (
-                                    <span className="text-sm text-slate-500 italic ml-2">
-                                        * Exports reflect currently applied filters
-                                    </span>
-                                )}
-                            </div>
                         </div>
                     </CardContent>
                 </Card>
