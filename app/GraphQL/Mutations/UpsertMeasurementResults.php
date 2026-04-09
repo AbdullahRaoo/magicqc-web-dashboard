@@ -38,8 +38,19 @@ class UpsertMeasurementResults
             $hasPieceSessionId = DB::getSchemaBuilder()->hasColumn('measurement_results', 'piece_session_id');
             $hasArticleStyle = DB::getSchemaBuilder()->hasColumn('measurement_results', 'article_style');
 
+            // CRITICAL: piece_session_id is required for correct piece tracking
+            // If column missing, fail fast instead of silently falling back to old key
+            if (!$hasPieceSessionId) {
+                return [
+                    'success' => false,
+                    'message' => 'MIGRATION REQUIRED: piece_session_id column missing from measurement_results table. Run: php artisan migrate',
+                    'count' => 0,
+                ];
+            }
+
             $rows = array_map(function ($r) use ($hasPieceSessionId, $hasArticleStyle) {
                 $row = [
+                    'piece_session_id' => $r['piece_session_id'] ?? null,  // REQUIRED for piece tracking
                     'purchase_order_article_id' => $r['purchase_order_article_id'],
                     'measurement_id' => $r['measurement_id'],
                     'size' => $r['size'],
@@ -50,10 +61,6 @@ class UpsertMeasurementResults
                     'status' => $r['status'] ?? 'PENDING',
                     'operator_id' => $r['operator_id'] ?? null,
                 ];
-
-                if ($hasPieceSessionId) {
-                    $row['piece_session_id'] = $r['piece_session_id'] ?? null;
-                }
 
                 if ($hasArticleStyle) {
                     $row['article_style'] = $r['article_style'] ?? null;
@@ -67,8 +74,8 @@ class UpsertMeasurementResults
                 $updateColumns[] = 'article_style';
             }
 
-            // Use piece_session_id as primary key if available, otherwise fall back to old key for backward compat
-            $upsertKey = $hasPieceSessionId ? ['piece_session_id', 'purchase_order_article_id', 'measurement_id', 'size'] : ['purchase_order_article_id', 'measurement_id', 'size'];
+            // ALWAYS scope by piece_session_id to prevent cross-piece overwrites
+            $upsertKey = ['piece_session_id', 'purchase_order_article_id', 'measurement_id', 'size'];
 
             DB::table('measurement_results')->upsert(
                 $rows,

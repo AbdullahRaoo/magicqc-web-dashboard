@@ -9,12 +9,20 @@ class UpsertMeasurementSession
     public function __invoke($_, array $args): array
     {
         try {
-            // piece_session_id is REQUIRED - it's the unique identifier for this physical piece
+            // CRITICAL: piece_session_id is REQUIRED - it's the unique identifier for this physical piece
             $pieceSessionId = $args['piece_session_id'] ?? null;
             if (!$pieceSessionId) {
                 return [
                     'success' => false,
                     'message' => 'piece_session_id is required to track individual pieces',
+                ];
+            }
+
+            // CRITICAL: Verify column exists (migration applied)
+            if (!DB::getSchemaBuilder()->hasColumn('measurement_sessions', 'piece_session_id')) {
+                return [
+                    'success' => false,
+                    'message' => 'MIGRATION REQUIRED: piece_session_id column missing from measurement_sessions table. Run: php artisan migrate',
                 ];
             }
 
@@ -42,7 +50,7 @@ class UpsertMeasurementSession
 
             DB::table('measurement_sessions')->upsert(
                 [[
-                    'piece_session_id' => $pieceSessionId,
+                    'piece_session_id' => $pieceSessionId,  // PRIMARY KEY for piece tracking
                     'purchase_order_article_id' => $args['purchase_order_article_id'],
                     'size' => $args['size'],
                     'article_style' => $articleStyle,
@@ -56,7 +64,7 @@ class UpsertMeasurementSession
                     'back_qc_result' => $args['back_qc_result'] ?? null,
                     'updated_at' => now(),
                 ]],
-                ['piece_session_id'],
+                ['piece_session_id'],  // UPSERT SCOPED BY PIECE SESSION ID
                 [
                     'purchase_order_article_id', 'size', 'article_style', 'article_id', 'purchase_order_id',
                     'operator_id', 'status', 'front_side_complete', 'back_side_complete',
