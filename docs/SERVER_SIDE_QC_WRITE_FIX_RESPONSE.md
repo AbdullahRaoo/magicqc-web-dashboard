@@ -91,3 +91,41 @@ Expected output when fixed:
 - `upsertMeasurementResultsDetailed: success=true`
 
 If either fails, treat deployment as not complete and verify target environment/container routing.
+
+## Post-Deploy QC Validation Checklist (Run Every Release)
+
+1. Deploy and health-check
+
+```bash
+git pull
+./deploy.sh
+```
+
+2. Run GraphQL write probe
+
+```bash
+MAGICQC_API_KEY=<your_key> ./scripts/verify-qc-graphql-writes.sh
+```
+
+3. Confirm probe passes both mutations
+
+- `upsertMeasurementResults: success=true`
+- `upsertMeasurementResultsDetailed: success=true`
+
+4. Confirm operator workflow
+
+- Start measurement does not show save error.
+- Next Piece does not show `Failed to save piece`.
+
+5. Spot-check DB rows for tested `(purchase_order_article_id, size)`
+
+- `measurement_results`
+- `measurement_results_detailed`
+- `measurement_sessions`
+
+6. If any check fails
+
+- Re-run probe against explicit endpoint:  
+   `./scripts/verify-qc-graphql-writes.sh https://magicqc.online/graphql <your_key>`
+- Check active app container/image and restart stale services.
+- Rotate API key if it was exposed in logs/chat.
