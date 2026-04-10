@@ -12,6 +12,7 @@ export default function SystemLogin() {
     const { data, setData, post, processing, errors } = useForm({
         username: '',
         password: '',
+        remember: false,
     });
 
     const submit: FormEventHandler = (e) => {
@@ -135,6 +136,19 @@ export default function SystemLogin() {
                                         </button>
                                     </div>
                                     <InputError message={errors.password} className="mt-1" />
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        id="remember"
+                                        type="checkbox"
+                                        checked={data.remember}
+                                        onChange={(e) => setData('remember', e.target.checked)}
+                                        className="h-4 w-4 rounded border-white/20 bg-white/5 text-[#f7a536] focus:ring-[#f7a536]/30"
+                                    />
+                                    <Label htmlFor="remember" className="text-sm text-white/55">
+                                        Keep me logged in
+                                    </Label>
                                 </div>
 
                                 <Button

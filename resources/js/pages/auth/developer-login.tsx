@@ -11,6 +11,7 @@ export default function DeveloperLogin() {
     const [showPassword, setShowPassword] = useState(false);
     const { data, setData, post, processing, errors } = useForm({
         password: '',
+        remember: false,
     });
 
     const submit: FormEventHandler = (e) => {
@@ -120,6 +121,19 @@ export default function DeveloperLogin() {
                                         </button>
                                     </div>
                                     <InputError message={errors.password} className="mt-1" />
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        id="remember"
+                                        type="checkbox"
+                                        checked={data.remember}
+                                        onChange={(e) => setData('remember', e.target.checked)}
+                                        className="h-4 w-4 rounded border-white/20 bg-white/5 text-emerald-500 focus:ring-emerald-500/30"
+                                    />
+                                    <Label htmlFor="remember" className="text-sm text-white/55">
+                                        Keep me logged in
+                                    </Label>
                                 </div>
 
                                 <Button

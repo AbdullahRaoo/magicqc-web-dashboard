@@ -154,8 +154,7 @@ Route::middleware([\App\Http\Middleware\EnsureAuthenticatedOrDeveloper::class])-
     });
 });
 
-// Developer Settings (available to developer access only)
-Route::middleware([\App\Http\Middleware\EnsureDeveloper::class])->group(function () {
+Route::middleware([\App\Http\Middleware\EnsureDeveloperOrManagerQC::class])->group(function () {
     Route::resource('operators', \App\Http\Controllers\OperatorController::class);
     Route::put('operators/{operator}/reset-pin', [\App\Http\Controllers\OperatorController::class, 'resetPin'])
         ->name('operators.reset-pin');
@@ -163,7 +162,10 @@ Route::middleware([\App\Http\Middleware\EnsureDeveloper::class])->group(function
         ->name('operators.deactivate');
     Route::put('operators/{operator}/reactivate', [\App\Http\Controllers\OperatorController::class, 'reactivate'])
         ->name('operators.reactivate');
+});
 
+// Developer Settings (available to developer access only)
+Route::middleware([\App\Http\Middleware\EnsureDeveloper::class])->group(function () {
     Route::get('developer-settings', [\App\Http\Controllers\DeveloperSettingsController::class, 'index'])
         ->name('developer.settings');
     Route::put('developer-settings/password', [\App\Http\Controllers\DeveloperSettingsController::class, 'updatePassword'])
