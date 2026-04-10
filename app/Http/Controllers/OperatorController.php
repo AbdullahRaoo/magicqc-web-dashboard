@@ -3,12 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\Operator;
-use Illuminate\Database\QueryException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -19,7 +18,13 @@ class OperatorController extends Controller
      */
     public function index(): Response
     {
-        $operators = Operator::latest()->paginate(15);
+        $query = Operator::query();
+
+        if (Schema::hasColumn('operators', 'is_active')) {
+            $query->orderByDesc('is_active');
+        }
+
+        $operators = $query->latest()->paginate(15);
 
         return Inertia::render('operators/index', [
             'operators' => $operators,
@@ -44,23 +49,28 @@ class OperatorController extends Controller
             'employee_id' => ['required', 'string', 'max:255', 'unique:operators,employee_id'],
             'department' => ['nullable', 'string', 'max:255'],
             'contact_number' => ['nullable', 'string', 'max:20'],
-            'login_pin' => ['required', 'string', 'min:4', 'max:10'],
+            'login_pin' => ['required', 'regex:/^\d{4}$/'],
         ], [
             'full_name.required' => 'Full name is required.',
             'employee_id.required' => 'Employee ID is required.',
             'employee_id.unique' => 'This employee ID already exists.',
             'login_pin.required' => 'Login PIN is required.',
-            'login_pin.min' => 'Login PIN must be at least 4 characters.',
-            'login_pin.max' => 'Login PIN must not exceed 10 characters.',
+            'login_pin.regex' => 'Login PIN must be exactly 4 digits.',
         ]);
 
-        Operator::create([
+        $payload = [
             'full_name' => $validated['full_name'],
             'employee_id' => $validated['employee_id'],
             'department' => $validated['department'] ?? null,
             'contact_number' => $validated['contact_number'] ?? null,
             'login_pin' => Hash::make($validated['login_pin']),
-        ]);
+        ];
+
+        if (Schema::hasColumn('operators', 'is_active')) {
+            $payload['is_active'] = true;
+        }
+
+        Operator::create($payload);
 
         return redirect()->route('operators.index')
             ->with('success', 'Operator created successfully.');
@@ -96,13 +106,10 @@ class OperatorController extends Controller
             'employee_id' => ['required', 'string', 'max:255', 'unique:operators,employee_id,'.$operator->id],
             'department' => ['nullable', 'string', 'max:255'],
             'contact_number' => ['nullable', 'string', 'max:20'],
-            'login_pin' => ['nullable', 'string', 'min:4', 'max:10'],
         ], [
             'full_name.required' => 'Full name is required.',
             'employee_id.required' => 'Employee ID is required.',
             'employee_id.unique' => 'This employee ID already exists.',
-            'login_pin.min' => 'Login PIN must be at least 4 characters.',
-            'login_pin.max' => 'Login PIN must not exceed 10 characters.',
         ]);
 
         try {
@@ -112,11 +119,6 @@ class OperatorController extends Controller
                 'department' => $validated['department'] ?? null,
                 'contact_number' => $validated['contact_number'] ?? null,
             ];
-
-            // Only update login_pin if provided
-            if (!empty($validated['login_pin'])) {
-                $updateData['login_pin'] = Hash::make($validated['login_pin']);
-            }
 
             $operator->update($updateData);
 
@@ -139,44 +141,79 @@ class OperatorController extends Controller
      */
     public function destroy(Operator $operator): RedirectResponse
     {
+        return $this->deactivate($operator);
+    }
+
+    public function resetPin(Request $request, Operator $operator): RedirectResponse
+    {
+        $validated = $request->validate([
+            'new_pin' => ['required', 'regex:/^\d{4}$/'],
+        ], [
+            'new_pin.required' => 'New PIN is required.',
+            'new_pin.regex' => 'New PIN must be exactly 4 digits.',
+        ]);
+
         try {
-            DB::transaction(function () use ($operator) {
-                // Nullify operator references in tables with RESTRICT / SET NULL FK rules.
-                // measurement_results (Electron-created, FK was RESTRICT, now SET NULL)
-                // measurement_results_detailed (FK is SET NULL)
-                // Do this explicitly so deletion succeeds even before FK migration runs.
-                DB::table('measurement_results')
-                    ->where('operator_id', $operator->id)
-                    ->update(['operator_id' => null]);
-
-                DB::table('measurement_results_detailed')
-                    ->where('operator_id', $operator->id)
-                    ->update(['operator_id' => null]);
-
-                // inspection_records → ON DELETE CASCADE (handled by DB)
-                // measurement_sessions → ON DELETE CASCADE (handled by DB)
-
-                $operator->delete();
-            });
-
-            return redirect()->route('operators.index')
-                ->with('success', 'Operator deleted successfully.');
-        } catch (QueryException $e) {
-            Log::error('Failed to delete operator (FK constraint)', [
-                'operator_id' => $operator->id,
-                'error' => $e->getMessage(),
+            $operator->update([
+                'login_pin' => Hash::make($validated['new_pin']),
             ]);
 
             return redirect()->route('operators.index')
-                ->with('error', 'Cannot delete this operator because they have linked records. Please contact an administrator.');
+                ->with('success', 'Operator PIN reset successfully.');
         } catch (\Exception $e) {
-            Log::error('Failed to delete operator', [
+            Log::error('Failed to reset operator PIN', [
+                'operator_id' => $operator->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return redirect()->back()
+                ->with('error', 'Failed to reset operator PIN. Please try again.');
+        }
+    }
+
+    public function deactivate(Operator $operator): RedirectResponse
+    {
+        if (!Schema::hasColumn('operators', 'is_active')) {
+            return redirect()->route('operators.index')
+                ->with('error', 'Migration required: is_active column is missing.');
+        }
+
+        try {
+            $operator->update(['is_active' => false]);
+
+            return redirect()->route('operators.index')
+                ->with('success', 'Operator deactivated successfully.');
+        } catch (\Exception $e) {
+            Log::error('Failed to deactivate operator', [
                 'operator_id' => $operator->id,
                 'error' => $e->getMessage(),
             ]);
 
             return redirect()->route('operators.index')
-                ->with('error', 'Failed to delete operator. Please try again.');
+                ->with('error', 'Failed to deactivate operator. Please try again.');
+        }
+    }
+
+    public function reactivate(Operator $operator): RedirectResponse
+    {
+        if (!Schema::hasColumn('operators', 'is_active')) {
+            return redirect()->route('operators.index')
+                ->with('error', 'Migration required: is_active column is missing.');
+        }
+
+        try {
+            $operator->update(['is_active' => true]);
+
+            return redirect()->route('operators.index')
+                ->with('success', 'Operator reactivated successfully.');
+        } catch (\Exception $e) {
+            Log::error('Failed to reactivate operator', [
+                'operator_id' => $operator->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return redirect()->route('operators.index')
+                ->with('error', 'Failed to reactivate operator. Please try again.');
         }
     }
 }

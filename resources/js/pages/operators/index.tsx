@@ -7,14 +7,12 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
 import AppLayout from '@/layouts/app-layout';
 import operatorRoutes from '@/routes/operators';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { Plus, Eye, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Eye, Pencil, UserCheck, UserX } from 'lucide-react';
 import { type PaginatedData } from '@/types';
-import { useState } from 'react';
 
 interface Operator {
     id: number;
@@ -22,6 +20,7 @@ interface Operator {
     employee_id: string;
     department: string | null;
     contact_number: string | null;
+    is_active?: boolean;
     created_at: string;
     updated_at: string;
 }
@@ -38,18 +37,20 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 export default function Index({ operators }: Props) {
-    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-    const [operatorToDelete, setOperatorToDelete] = useState<{ id: number; full_name: string } | null>(null);
+    const handleDeactivate = (operator: Operator) => {
+        if (!window.confirm(`Deactivate operator "${operator.full_name}"?`)) {
+            return;
+        }
 
-    const handleDeleteClick = (operator: Operator) => {
-        setOperatorToDelete({ id: operator.id, full_name: operator.full_name });
-        setDeleteDialogOpen(true);
+        router.put(`/operators/${operator.id}/deactivate`);
     };
 
-    const handleDeleteConfirm = () => {
-        if (operatorToDelete) {
-            router.delete(operatorRoutes.destroy(operatorToDelete.id).url);
+    const handleReactivate = (operator: Operator) => {
+        if (!window.confirm(`Reactivate operator "${operator.full_name}"?`)) {
+            return;
         }
+
+        router.put(`/operators/${operator.id}/reactivate`);
     };
 
     return (
@@ -79,16 +80,14 @@ export default function Index({ operators }: Props) {
                                 <TableHead>Full Name</TableHead>
                                 <TableHead>Employee ID</TableHead>
                                 <TableHead>Department</TableHead>
-                                <TableHead>Contact Number</TableHead>
-                                <TableHead>Created At</TableHead>
-                                <TableHead>Updated At</TableHead>
+                                <TableHead>Status</TableHead>
                                 <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {operators.data.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={7} className="text-center text-neutral-500">
+                                    <TableCell colSpan={5} className="text-center text-neutral-500">
                                         No operators found. Create your first one!
                                     </TableCell>
                                 </TableRow>
@@ -98,12 +97,16 @@ export default function Index({ operators }: Props) {
                                         <TableCell className="font-medium">{operator.full_name}</TableCell>
                                         <TableCell>{operator.employee_id}</TableCell>
                                         <TableCell>{operator.department || 'N/A'}</TableCell>
-                                        <TableCell>{operator.contact_number || 'N/A'}</TableCell>
                                         <TableCell>
-                                            {new Date(operator.created_at).toLocaleDateString()}
-                                        </TableCell>
-                                        <TableCell>
-                                            {new Date(operator.updated_at).toLocaleDateString()}
+                                            {operator.is_active === false ? (
+                                                <span className="rounded-full bg-red-100 px-2 py-1 text-xs font-medium text-red-700 dark:bg-red-900/40 dark:text-red-300">
+                                                    Inactive
+                                                </span>
+                                            ) : (
+                                                <span className="rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-700 dark:bg-green-900/40 dark:text-green-300">
+                                                    Active
+                                                </span>
+                                            )}
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex items-center justify-end gap-2">
@@ -117,13 +120,25 @@ export default function Index({ operators }: Props) {
                                                         <Pencil className="h-4 w-4" />
                                                     </Button>
                                                 </Link>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() => handleDeleteClick(operator)}
-                                                >
-                                                    <Trash2 className="h-4 w-4 text-red-500" />
-                                                </Button>
+                                                {operator.is_active === false ? (
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => handleReactivate(operator)}
+                                                        title="Reactivate"
+                                                    >
+                                                        <UserCheck className="h-4 w-4 text-green-600" />
+                                                    </Button>
+                                                ) : (
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => handleDeactivate(operator)}
+                                                        title="Deactivate"
+                                                    >
+                                                        <UserX className="h-4 w-4 text-red-500" />
+                                                    </Button>
+                                                )}
                                             </div>
                                         </TableCell>
                                     </TableRow>
@@ -153,14 +168,6 @@ export default function Index({ operators }: Props) {
                         </div>
                     </div>
                 )}
-
-                <DeleteConfirmationDialog
-                    open={deleteDialogOpen}
-                    onOpenChange={setDeleteDialogOpen}
-                    onConfirm={handleDeleteConfirm}
-                    title="Delete Operator"
-                    description={`Are you sure you want to delete operator "${operatorToDelete?.full_name}"? This action cannot be undone and will permanently delete the operator and all associated data.`}
-                />
             </div>
         </AppLayout>
     );

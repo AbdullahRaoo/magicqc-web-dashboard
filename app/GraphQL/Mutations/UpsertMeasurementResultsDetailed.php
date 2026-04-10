@@ -20,10 +20,13 @@ class UpsertMeasurementResultsDetailed
         $poArticleId = $args['purchase_order_article_id'];
         $size = $args['size'];
         $side = $args['side'];
+        $tableNameArg = $args['table_name'] ?? null;
         $results = $args['results'];
 
         try {
             DB::beginTransaction();
+
+            $hasDetailedTableName = DB::getSchemaBuilder()->hasColumn('measurement_results_detailed', 'table_name');
 
             // Delete existing results ONLY for this piece_session_id + side combination
             // This preserves history for other pieces
@@ -54,6 +57,14 @@ class UpsertMeasurementResultsDetailed
                 ];
             }, $results);
 
+            if ($hasDetailedTableName) {
+                $rows = array_map(function ($row) use ($tableNameArg) {
+                    $row['table_name'] = $tableNameArg;
+
+                    return $row;
+                }, $rows);
+            }
+
             DB::table('measurement_results_detailed')->insert($rows);
 
             if (!DB::getSchemaBuilder()->hasTable('measurement_results')) {
@@ -70,6 +81,7 @@ class UpsertMeasurementResultsDetailed
                     tol_minus DECIMAL(10,2) NULL,
                     status ENUM('PASS','FAIL','PENDING') DEFAULT 'PENDING',
                     operator_id BIGINT UNSIGNED NULL,
+                    table_name VARCHAR(50) NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                     UNIQUE KEY mr_piece_unique (piece_session_id, purchase_order_article_id, measurement_id, size),
@@ -81,6 +93,7 @@ class UpsertMeasurementResultsDetailed
 
             $hasPieceSessionId = DB::getSchemaBuilder()->hasColumn('measurement_results', 'piece_session_id');
             $hasArticleStyle = DB::getSchemaBuilder()->hasColumn('measurement_results', 'article_style');
+            $hasTableName = DB::getSchemaBuilder()->hasColumn('measurement_results', 'table_name');
 
             if (!$hasPieceSessionId) {
                 throw new \RuntimeException('MIGRATION REQUIRED: piece_session_id column missing from measurement_results table. Run: php artisan migrate');
@@ -114,6 +127,10 @@ class UpsertMeasurementResultsDetailed
                     if ($hasArticleStyle) {
                         $grouped[$row->measurement_id]['article_style'] = $row->article_style;
                     }
+
+                    if ($hasTableName) {
+                        $grouped[$row->measurement_id]['table_name'] = $tableNameArg;
+                    }
                 }
                 $grouped[$row->measurement_id]['sides'][] = $row->status;
             }
@@ -140,6 +157,9 @@ class UpsertMeasurementResultsDetailed
                 $updateColumns = ['status', 'operator_id'];
                 if ($hasArticleStyle) {
                     $updateColumns[] = 'article_style';
+                }
+                if ($hasTableName) {
+                    $updateColumns[] = 'table_name';
                 }
 
                 DB::table('measurement_results')->upsert(

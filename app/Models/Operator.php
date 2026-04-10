@@ -15,9 +15,14 @@ class Operator extends Model
         'department',
         'contact_number',
         'login_pin',
+        'is_active',
     ];
 
     protected $hidden = [
         'login_pin',
+    ];
+
+    protected $casts = [
+        'is_active' => 'boolean',
     ];
 }

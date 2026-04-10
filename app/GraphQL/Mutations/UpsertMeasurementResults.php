@@ -26,6 +26,7 @@ class UpsertMeasurementResults
                     tol_minus DECIMAL(10,2) NULL,
                     status ENUM('PASS','FAIL','PENDING') DEFAULT 'PENDING',
                     operator_id BIGINT UNSIGNED NULL,
+                    table_name VARCHAR(50) NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                     UNIQUE KEY mr_piece_unique (piece_session_id, purchase_order_article_id, measurement_id, size),
@@ -37,6 +38,7 @@ class UpsertMeasurementResults
 
             $hasPieceSessionId = DB::getSchemaBuilder()->hasColumn('measurement_results', 'piece_session_id');
             $hasArticleStyle = DB::getSchemaBuilder()->hasColumn('measurement_results', 'article_style');
+            $hasTableName = DB::getSchemaBuilder()->hasColumn('measurement_results', 'table_name');
 
             // CRITICAL: piece_session_id is required for correct piece tracking
             // If column missing, fail fast instead of silently falling back to old key
@@ -66,12 +68,19 @@ class UpsertMeasurementResults
                     $row['article_style'] = $r['article_style'] ?? null;
                 }
 
+                if ($hasTableName) {
+                    $row['table_name'] = $r['table_name'] ?? null;
+                }
+
                 return $row;
             }, $results);
 
             $updateColumns = ['measured_value', 'expected_value', 'tol_plus', 'tol_minus', 'status', 'operator_id', 'updated_at'];
             if ($hasArticleStyle) {
                 $updateColumns[] = 'article_style';
+            }
+            if ($hasTableName) {
+                $updateColumns[] = 'table_name';
             }
 
             // ALWAYS scope by piece_session_id to prevent cross-piece overwrites

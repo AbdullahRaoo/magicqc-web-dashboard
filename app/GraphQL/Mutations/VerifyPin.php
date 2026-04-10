@@ -19,6 +19,17 @@ class VerifyPin
             ];
         }
 
+        if (
+            \Illuminate\Support\Facades\Schema::hasColumn('operators', 'is_active')
+            && !$operator->is_active
+        ) {
+            return [
+                'success' => false,
+                'message' => 'Operator account is inactive.',
+                'operator' => null,
+            ];
+        }
+
         // Support both bcrypt-hashed and plain-text PINs
         $storedPin = $operator->login_pin;
         $pinMatch = false;

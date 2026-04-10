@@ -105,6 +105,7 @@ type Operator {
     employee_id: String
     department: String
     contact_number: String
+    is_active: Boolean
     "login_pin is always hidden (see Operator model $hidden)"
     created_at: DateTime
     updated_at: DateTime
@@ -168,6 +169,7 @@ type MeasurementResult {
     tol_minus: Float
     status: String
     operator_id: Int
+    table_name: String
     created_at: DateTime
     updated_at: DateTime
 }
@@ -186,6 +188,7 @@ type MeasurementResultDetailed {
     tol_minus: Float
     status: String
     operator_id: Int
+    table_name: String
     created_at: DateTime
     updated_at: DateTime
 }
@@ -199,6 +202,7 @@ type MeasurementSession {
     article_id: Int
     purchase_order_id: Int
     operator_id: Int
+    table_name: String
     status: String
     front_side_complete: Boolean
     back_side_complete: Boolean
@@ -318,6 +322,40 @@ type Mutation {
         pin: String!
     ): VerifyPinResponse! @guard(with: ["api-key"])
 
+    "Create a new operator account."
+    createOperator(
+        full_name: String!
+        employee_id: String!
+        department: String
+        contact_number: String
+        login_pin: String!
+    ): OperatorMutationResponse! @guard(with: ["api-key"])
+
+    "Update operator profile fields."
+    updateOperator(
+        id: Int!
+        full_name: String
+        employee_id: String
+        department: String
+        contact_number: String
+    ): OperatorMutationResponse! @guard(with: ["api-key"])
+
+    "Reset operator PIN."
+    resetOperatorPin(
+        id: Int!
+        new_pin: String!
+    ): MutationResponse! @guard(with: ["api-key"])
+
+    "Deactivate operator account."
+    deactivateOperator(
+        id: Int!
+    ): MutationResponse! @guard(with: ["api-key"])
+
+    "Reactivate operator account."
+    reactivateOperator(
+        id: Int!
+    ): MutationResponse! @guard(with: ["api-key"])
+
     "Upsert measurement results in bulk."
     upsertMeasurementResults(
         results: [MeasurementResultInput!]!
@@ -329,6 +367,7 @@ type Mutation {
         purchase_order_article_id: Int!
         size: String!
         side: String!
+        table_name: String
         results: [DetailedResultInput!]!
     ): MutationResponse! @guard(with: ["api-key"])
 
@@ -341,6 +380,7 @@ type Mutation {
         article_id: Int
         purchase_order_id: Int
         operator_id: Int
+        table_name: String
         status: String
         front_side_complete: Boolean
         back_side_complete: Boolean
@@ -372,6 +412,7 @@ input MeasurementResultInput {
     tol_minus: Float
     status: String
     operator_id: Int
+    table_name: String
 }
 
 input DetailedResultInput {
@@ -406,6 +447,12 @@ type MutationResponse {
     success: Boolean!
     message: String!
     count: Int
+}
+
+type OperatorMutationResponse {
+    success: Boolean!
+    message: String!
+    operator: Operator
 }
 
 type SessionResponse {

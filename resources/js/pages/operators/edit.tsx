@@ -8,6 +8,7 @@ import AppLayout from '@/layouts/app-layout';
 import operatorRoutes from '@/routes/operators';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router, useForm } from '@inertiajs/react';
+import { useState } from 'react';
 
 interface Operator {
     id: number;
@@ -29,8 +30,10 @@ export default function Edit({ operator }: Props) {
         employee_id: operator.employee_id,
         department: operator.department || '',
         contact_number: operator.contact_number || '',
-        login_pin: '',
     });
+    const [newPin, setNewPin] = useState('');
+    const [pinError, setPinError] = useState('');
+    const [pinProcessing, setPinProcessing] = useState(false);
 
     const breadcrumbs: BreadcrumbItem[] = [
         {
@@ -48,6 +51,31 @@ export default function Edit({ operator }: Props) {
         put(update(operator.id).url, {
             preserveScroll: true,
         });
+    };
+
+    const resetPin = (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!/^\d{4}$/.test(newPin)) {
+            setPinError('PIN must be exactly 4 digits.');
+            return;
+        }
+
+        setPinError('');
+        setPinProcessing(true);
+
+        router.put(
+            `/operators/${operator.id}/reset-pin`,
+            { new_pin: newPin },
+            {
+                preserveScroll: true,
+                onSuccess: () => setNewPin(''),
+                onError: (serverErrors) => {
+                    setPinError(serverErrors.new_pin || 'Failed to reset PIN.');
+                },
+                onFinish: () => setPinProcessing(false),
+            },
+        );
     };
 
     return (
@@ -110,22 +138,6 @@ export default function Edit({ operator }: Props) {
                                 />
                                 <InputError message={errors.contact_number} />
                             </div>
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="login_pin">Login PIN (leave blank to keep current)</Label>
-                                <Input
-                                    id="login_pin"
-                                    type="password"
-                                    value={data.login_pin}
-                                    onChange={(e) => setData('login_pin', e.target.value)}
-                                    minLength={4}
-                                    maxLength={10}
-                                />
-                                <InputError message={errors.login_pin} />
-                                <p className="text-xs text-neutral-500">
-                                    Leave blank to keep current PIN. PIN must be between 4 and 10 characters if provided.
-                                </p>
-                            </div>
                         </CardContent>
                     </Card>
 
@@ -141,6 +153,37 @@ export default function Edit({ operator }: Props) {
                             Cancel
                         </Button>
                     </div>
+                </form>
+
+                <form onSubmit={resetPin} className="space-y-4">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Reset PIN</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="grid gap-2">
+                                <Label htmlFor="new_pin">New PIN *</Label>
+                                <Input
+                                    id="new_pin"
+                                    type="password"
+                                    value={newPin}
+                                    onChange={(e) => setNewPin(e.target.value)}
+                                    minLength={4}
+                                    maxLength={4}
+                                    inputMode="numeric"
+                                    required
+                                />
+                                {pinError ? <p className="text-sm text-red-600">{pinError}</p> : null}
+                                <p className="text-xs text-neutral-500">PIN must be exactly 4 digits.</p>
+                            </div>
+
+                            <div className="flex items-center gap-4">
+                                <Button type="submit" disabled={pinProcessing}>
+                                    {pinProcessing ? 'Resetting...' : 'Reset PIN'}
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
                 </form>
             </div>
         </AppLayout>

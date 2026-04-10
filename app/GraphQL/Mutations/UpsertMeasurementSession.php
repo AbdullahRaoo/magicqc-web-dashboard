@@ -45,6 +45,7 @@ class UpsertMeasurementSession
             $articleId = $args['article_id'] ?? null;
             $purchaseOrderId = $args['purchase_order_id'] ?? null;
             $articleStyle = $args['article_style'] ?? null;
+            $hasTableName = DB::getSchemaBuilder()->hasColumn('measurement_sessions', 'table_name');
 
             // Auto-resolve article_id / purchase_order_id from the join table when not supplied.
             // purchase_order_articles has no article_id column — it stores article_style directly,
@@ -64,28 +65,37 @@ class UpsertMeasurementSession
                 }
             }
 
+            $row = [
+                'piece_session_id' => $pieceSessionId,
+                'purchase_order_article_id' => $args['purchase_order_article_id'],
+                'size' => $args['size'],
+                'article_style' => $articleStyle,
+                'article_id' => $articleId,
+                'purchase_order_id' => $purchaseOrderId,
+                'operator_id' => $args['operator_id'] ?? null,
+                'status' => $args['status'] ?? 'in_progress',
+                'front_side_complete' => $args['front_side_complete'] ?? false,
+                'back_side_complete' => $args['back_side_complete'] ?? false,
+                'front_qc_result' => $args['front_qc_result'] ?? null,
+                'back_qc_result' => $args['back_qc_result'] ?? null,
+                'updated_at' => now(),
+            ];
+
+            $updateColumns = [
+                'purchase_order_article_id', 'size', 'article_style', 'article_id', 'purchase_order_id',
+                'operator_id', 'status', 'front_side_complete', 'back_side_complete',
+                'front_qc_result', 'back_qc_result', 'updated_at',
+            ];
+
+            if ($hasTableName) {
+                $row['table_name'] = $args['table_name'] ?? null;
+                $updateColumns[] = 'table_name';
+            }
+
             DB::table('measurement_sessions')->upsert(
-                [[
-                    'piece_session_id' => $pieceSessionId,  // PRIMARY KEY for piece tracking
-                    'purchase_order_article_id' => $args['purchase_order_article_id'],
-                    'size' => $args['size'],
-                    'article_style' => $articleStyle,
-                    'article_id' => $articleId,
-                    'purchase_order_id' => $purchaseOrderId,
-                    'operator_id' => $args['operator_id'] ?? null,
-                    'status' => $args['status'] ?? 'in_progress',
-                    'front_side_complete' => $args['front_side_complete'] ?? false,
-                    'back_side_complete' => $args['back_side_complete'] ?? false,
-                    'front_qc_result' => $args['front_qc_result'] ?? null,
-                    'back_qc_result' => $args['back_qc_result'] ?? null,
-                    'updated_at' => now(),
-                ]],
+                [$row],
                 ['piece_session_id'],  // UPSERT SCOPED BY PIECE SESSION ID
-                [
-                    'purchase_order_article_id', 'size', 'article_style', 'article_id', 'purchase_order_id',
-                    'operator_id', 'status', 'front_side_complete', 'back_side_complete',
-                    'front_qc_result', 'back_qc_result', 'updated_at',
-                ]
+                $updateColumns
             );
 
             return [

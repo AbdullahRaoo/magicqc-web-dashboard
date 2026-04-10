@@ -51,7 +51,6 @@ Route::middleware([\App\Http\Middleware\EnsureAuthenticatedOrDeveloper::class])-
         ]);
     })->name('dashboard');
 
-    Route::resource('operators', \App\Http\Controllers\OperatorController::class);
     Route::resource('brands', \App\Http\Controllers\BrandController::class);
     Route::resource('purchase-orders', \App\Http\Controllers\PurchaseOrderController::class);
     
@@ -157,6 +156,14 @@ Route::middleware([\App\Http\Middleware\EnsureAuthenticatedOrDeveloper::class])-
 
 // Developer Settings (available to developer access only)
 Route::middleware([\App\Http\Middleware\EnsureDeveloper::class])->group(function () {
+    Route::resource('operators', \App\Http\Controllers\OperatorController::class);
+    Route::put('operators/{operator}/reset-pin', [\App\Http\Controllers\OperatorController::class, 'resetPin'])
+        ->name('operators.reset-pin');
+    Route::put('operators/{operator}/deactivate', [\App\Http\Controllers\OperatorController::class, 'deactivate'])
+        ->name('operators.deactivate');
+    Route::put('operators/{operator}/reactivate', [\App\Http\Controllers\OperatorController::class, 'reactivate'])
+        ->name('operators.reactivate');
+
     Route::get('developer-settings', [\App\Http\Controllers\DeveloperSettingsController::class, 'index'])
         ->name('developer.settings');
     Route::put('developer-settings/password', [\App\Http\Controllers\DeveloperSettingsController::class, 'updatePassword'])

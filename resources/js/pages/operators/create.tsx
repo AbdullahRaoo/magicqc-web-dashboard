@@ -116,11 +116,12 @@ export default function Create() {
                                     onChange={(e) => setData('login_pin', e.target.value)}
                                     required
                                     minLength={4}
-                                    maxLength={10}
+                                    maxLength={4}
+                                    inputMode="numeric"
                                 />
                                 <InputError message={errors.login_pin} />
                                 <p className="text-xs text-neutral-500">
-                                    PIN must be between 4 and 10 characters
+                                    PIN must be exactly 4 digits
                                 </p>
                             </div>
                         </CardContent>

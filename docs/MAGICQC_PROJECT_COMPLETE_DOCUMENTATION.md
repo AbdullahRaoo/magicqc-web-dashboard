@@ -1612,3 +1612,130 @@ mysql -h$DB_HOST -u$DB_USER -p$DB_PASS -e "SELECT COUNT(*) FROM measurement_sess
 **Code Status:** ✅ Ready for deployment  
 **Testing Status:** ✅ Verified (no errors)  
 **Deployment Status:** ⏳ Awaiting backend team git pull + migration
+
+---
+
+## Phase 5: Dashboard Redesign & Container Sync Fix (2026-04-10)
+
+### Summary
+
+Two major improvements completed:
+1. **Dashboard Redesign:** Removed outdated sections, implemented per-piece QC history feed
+2. **Docker Sync Fix:** Resolved stale asset caching by including Vite manifest in sync detection
+
+### Phase 5A: Dashboard Redesign
+
+#### Removed from UI
+- "Parameter Quality Overview" section
+- "Export Reports" section  
+- Article-wise summary view
+
+#### Added to UI
+- QC History Feed: Per-piece measurement details showing:
+  - Pass/Fail result status
+  - Measurements: passed, failed, total, pass rate
+  - Article: style, brand, type, size
+  - Operator: name and ID
+  - Timestamp of measurement
+
+#### Modified Files
+
+**Backend:** app/Http/Controllers/DirectorAnalyticsController.php
+- Added getQcHistory() method (lines 567-605)
+  - Aggregates measurement_results_detailed by piece_session_id
+  - Returns 50-entry feed ordered by updated_at descending
+  - Includes all measurement/piece/operator metadata
+- Updated buildPieceQuery() to include piece_session_id in select
+- Updated index() to pass qcHistory to Inertia response
+
+**Frontend:** resources/js/pages/director-analytics/index.tsx
+- Removed ArticleSummarySection, ExportReportsSection, ParameterQualitySection
+- Removed articleSearch, articleSummary, export-related state
+- Added QcHistoryItem type with piece-level fields
+- Implemented QC history feed component with per-piece cards
+- Build validation: ✅ npm run build succeeded with no errors
+
+### Phase 5B: Docker Container Sync Issue Discovery & Fix
+
+#### Problem Discovered
+Code changes deployed successfully locally. Build succeeded. But old UI sections remained visible on server after multiple deployments.
+
+#### Root Cause Analysis
+File: docker/entrypoint.sh
+- Original sync logic only checked vendor/autoload.php hash
+- Vite build changes (manifest.json) were never detected
+- Frontend-only changes never caused asset resync
+- Old JavaScript bundle remained in shared Docker mount /var/www/public/build
+- Container reused stale assets despite code updates
+
+#### Solution Implemented
+Updated docker/entrypoint.sh:
+- Added ASSET_HASH calculation from /tmp/build-output/manifest.json (new)
+- Combined vendor + asset hashes: "${VENDOR_HASH}:${ASSET_HASH}"
+- Hash comparison now detects frontend-only changes
+- Triggers asset copy to shared mount when either vendor OR assets change
+
+Enhanced deploy.sh:
+- Added sync marker reset before container startup: rm -f .last_sync_hash
+- Ensures fresh sync on every deployment
+- Prevents stale assets from interfering with new releases
+
+### Phase 5C: Verification Results
+
+Code Validation:
+✅ npm run build succeeded with no errors
+✅ Source code contains only "QC history" references (lines 575, 584)
+✅ Built bundle updated: index-DGyGqiq-.js contains new code
+✅ No "Parameter Quality Overview" or "Export Reports" text in output
+
+Container Sync Verification:
+✅ docker/entrypoint.sh includes both VENDOR_HASH and ASSET_HASH
+✅ Combined hash format verified
+✅ deploy.sh includes sync marker reset
+
+### Deployment Instructions for Server
+
+```
+cd /path/to/Multi
+git pull origin main
+npm install
+npm run build
+rm -f .last_sync_hash
+docker-compose down
+docker-compose up -d app worker nginx
+docker-compose exec -T app php artisan optimize:clear
+```
+
+### Post-Deployment Verification
+
+1. Hard refresh browser (Ctrl+Shift+R)
+2. Confirm: "QC history" section visible with per-piece data
+3. Confirm: No "Parameter Quality Overview" or "Export Reports" sections
+4. Confirm: Each piece shows measurements passed/failed and pass rate
+5. Reload page: Data persists (verify on refresh)
+6. Scroll through QC history: Multiple pieces display separately
+7. Check browser developer tools: Verify new asset bundle loaded (index-DGyGqiq-.js)
+
+### Work Completion Summary
+
+Phase 5 Status: ✅ Complete
+Implementation: 
+  - Dashboard redesigned with QC history feed
+  - Docker container sync fixed for frontend assets
+Code Changes:
+  - DirectorAnalyticsController.php: +40 lines (getQcHistory method)
+  - director-analytics/index.tsx: ~200 lines refactored (removed 3 sections, added QC history)
+  - docker/entrypoint.sh: +15 lines (Vite manifest hash check)
+  - deploy.sh: +3 lines (sync marker reset)
+Validation: ✅ Build successful, code verified
+Documentation: Updated 2026-04-10
+Status: Ready for server deployment
+
+### Related Session Work
+
+This phase completes the full QC tracking dashboard refactor:
+- Phase 1-4: Backend piece_session_id implementation and migration
+- Phase 5: Frontend dashboard redesign + deployment cache fix
+
+All changes maintain data integrity and are backward compatible during transition.
+
