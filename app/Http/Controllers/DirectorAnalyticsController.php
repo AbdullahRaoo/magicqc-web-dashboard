@@ -579,6 +579,7 @@ class DirectorAnalyticsController extends Controller
             ->leftJoinSub($measurementCounts, 'mc', function ($join) {
                 $join->on('pieces.piece_session_id', '=', 'mc.piece_session_id');
             })
+            ->where('pieces.piece_result', '!=', 'PENDING')
             ->orderByDesc('pieces.updated_at')
             ->orderByDesc('pieces.created_at')
             ->limit(50)
