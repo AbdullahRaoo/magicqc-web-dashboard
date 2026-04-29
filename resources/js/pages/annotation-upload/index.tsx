@@ -100,6 +100,14 @@ export default function AnnotationUploadIndex({ hasPassword, articleStyles }: Pr
     const jsonInputRef = useRef<HTMLInputElement>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
 
+    // Auto-load annotations when already verified (developer auto-bypass)
+    // This also keeps the session alive and refreshes the XSRF cookie
+    useEffect(() => {
+        if (isVerified) {
+            loadAnnotations();
+        }
+    }, [isVerified]);
+
     // Get selected article info
     const selectedArticle = articleStyles.find(a => a.id.toString() === selectedArticleId);
 
@@ -256,9 +264,9 @@ export default function AnnotationUploadIndex({ hasPassword, articleStyles }: Pr
                 body: formData,
             });
 
-            // Handle auth/session errors before parsing JSON
-            if (response.status === 401) {
-                setUploadError('Session expired. Please refresh the page and log in again.');
+            // Handle session expiry — CSRF token mismatch (419) or unauthenticated (401)
+            if (response.status === 419 || response.status === 401) {
+                setUploadError('Your session has expired. Please refresh the page and try again.');
                 return;
             }
 
