@@ -158,10 +158,6 @@ class AnnotationUploadController extends Controller
             // Store the image file on disk (original quality, for serving)
             Storage::disk('public')->put($imagePath, file_get_contents($image->getRealPath()));
 
-            // Create a compressed version for MySQL base64 storage
-            // This prevents max_allowed_packet issues with high-res images
-            $imageBase64 = $this->compressImageForDb($image->getRealPath(), $image->getMimeType());
-
             // Get image dimensions
             $imageInfo = getimagesize($image->getRealPath());
             $imageWidth = $imageInfo[0] ?? null;
@@ -198,7 +194,7 @@ class AnnotationUploadController extends Controller
                     'name' => $request->name ?? 'Annotation for ' . $articleStyle . ' - ' . $size . ' (' . ucfirst($side) . ', ' . ucfirst($color) . ')',
                     'annotation_data' => $annotationData,
                     'reference_image_path' => $imagePath,
-                    'reference_image_data' => $imageBase64,
+                    'reference_image_data' => null,
                     'reference_image_filename' => $filename,
                     'reference_image_mime_type' => $image->getMimeType(),
                     'reference_image_size' => $image->getSize(),
@@ -408,15 +404,13 @@ class AnnotationUploadController extends Controller
         $base64 = null;
         $mimeType = $annotation->reference_image_mime_type ?? 'image/jpeg';
 
-        // Primary: DB column (always authoritative, linked to the annotation row)
-        if ($annotation->reference_image_data) {
+        // Primary: disk file (always present after upload, no DB size limits)
+        $path = $annotation->getStoragePath();
+        if ($path && file_exists($path)) {
+            $base64 = base64_encode(file_get_contents($path));
+        } elseif ($annotation->reference_image_data) {
+            // Fallback: DB column (backward compat for older records)
             $base64 = $annotation->reference_image_data;
-        } else {
-            // Fallback: disk file (backward compat for records without DB data)
-            $path = $annotation->getStoragePath();
-            if ($path && file_exists($path)) {
-                $base64 = base64_encode(file_get_contents($path));
-            }
         }
 
         if (!$base64) {
