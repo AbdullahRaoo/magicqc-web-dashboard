@@ -314,10 +314,11 @@ export default function AnnotationUploadIndex({ hasPassword, articleStyles }: Pr
         }
     };
 
-    const handleDownload = async (articleStyle: string, size: string, side: string) => {
+    const handleDownload = async (articleStyle: string, size: string, side: string, color?: string | null) => {
         try {
+            const colorParam = color ? `?color=${encodeURIComponent(color)}` : '';
             // Fetch the annotation data
-            const response = await fetch(`/api/uploaded-annotations/${encodeURIComponent(articleStyle)}/${encodeURIComponent(size)}/${encodeURIComponent(side)}`, {
+            const response = await fetch(`/api/uploaded-annotations/${encodeURIComponent(articleStyle)}/${encodeURIComponent(size)}/${encodeURIComponent(side)}${colorParam}`, {
                 headers: {
                     'Accept': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
@@ -568,25 +569,18 @@ export default function AnnotationUploadIndex({ hasPassword, articleStyles }: Pr
                                         <Label htmlFor="size" className="font-medium">
                                             Size <span className="text-red-500">*</span>
                                         </Label>
-                                        {!selectedArticleId ? (
-                                            <Select disabled>
-                                                <SelectTrigger id="size" className="w-full">
-                                                    <SelectValue placeholder="Select article first..." />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="none" disabled>Select article first</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        ) : isLoadingSizes ? (
+                                        {isLoadingSizes ? (
                                             <div className="flex h-10 items-center gap-2 rounded-md border px-3 text-sm text-muted-foreground">
                                                 <RefreshCw className="h-4 w-4 animate-spin" />
                                                 Loading sizes...
                                             </div>
-                                        ) : availableSizes.length === 0 ? (
-                                            <div className="flex h-10 items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
-                                                <AlertCircle className="h-4 w-4" />
-                                                No sizes found for this article
-                                            </div>
+                                        ) : !selectedArticleId || availableSizes.length === 0 ? (
+                                            <Select disabled value="">
+                                                <SelectTrigger id="size" className="w-full">
+                                                    <SelectValue placeholder={!selectedArticleId ? 'Select article first...' : 'No sizes found'} />
+                                                </SelectTrigger>
+                                                <SelectContent />
+                                            </Select>
                                         ) : (
                                             <Select value={selectedSize} onValueChange={setSelectedSize}>
                                                 <SelectTrigger id="size" className="w-full">
@@ -888,7 +882,7 @@ export default function AnnotationUploadIndex({ hasPassword, articleStyles }: Pr
                                                                         variant="ghost"
                                                                         size="icon"
                                                                         className="h-7 w-7"
-                                                                        onClick={() => handleDownload(group.front!.article_style, group.front!.size, 'front')}
+                                                                        onClick={() => handleDownload(group.front!.article_style, group.front!.size, 'front', group.color)}
                                                                         title="Download JSON"
                                                                     >
                                                                         <Download className="h-3.5 w-3.5" />
@@ -946,7 +940,7 @@ export default function AnnotationUploadIndex({ hasPassword, articleStyles }: Pr
                                                                         variant="ghost"
                                                                         size="icon"
                                                                         className="h-7 w-7"
-                                                                        onClick={() => handleDownload(group.back!.article_style, group.back!.size, 'back')}
+                                                                        onClick={() => handleDownload(group.back!.article_style, group.back!.size, 'back', group.color)}
                                                                         title="Download JSON"
                                                                     >
                                                                         <Download className="h-3.5 w-3.5" />
