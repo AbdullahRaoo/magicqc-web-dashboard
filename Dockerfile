@@ -31,6 +31,9 @@ COPY --chown=www-data:www-data . /var/www
 # Ensure the main directory is writable by www-data
 RUN chown -R www-data:www-data /var/www
 
+# Increase PHP upload limits
+COPY docker/php/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
+
 # Copy entrypoint script and make executable
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

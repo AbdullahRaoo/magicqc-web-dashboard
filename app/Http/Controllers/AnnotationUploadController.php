@@ -98,7 +98,7 @@ class AnnotationUploadController extends Controller
             'side' => ['required', 'string', 'in:front,back'],
             'color' => ['required', 'string', 'in:black,white,other'],
             'json_file' => ['required', 'file', 'mimes:json,txt', 'max:10240'], // 10MB max
-            'reference_image' => ['required', 'file', 'mimes:jpg,jpeg,png,gif,webp', 'max:51200'], // 50MB max
+            'reference_image' => ['required', 'file', 'mimes:jpg,jpeg,png,gif,webp', 'max:102400'], // 100MB max
             'name' => ['nullable', 'string', 'max:255'],
         ]);
 
